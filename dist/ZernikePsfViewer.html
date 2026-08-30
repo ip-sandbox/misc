@@ -1,0 +1,3909 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zernike PSF Viewer</title>
+<style>
+:root {
+  --bg: #0d1017;
+  --panel: #151922;
+  --panel2: #1b2029;
+  --line: #2a3040;
+  --fg: #d6dbe6;
+  --fg-dim: #8b93a7;
+  --accent: #58a6ff;
+  --accent2: #ffb454;
+  --warn: #ff7b72;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 "Segoe UI", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  overflow: hidden;
+}
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+header h1 { font-size: 14px; margin: 0; font-weight: 600; letter-spacing: .02em; }
+header .spacer { flex: 1; }
+button, select, input[type=number], input[type=text] {
+  background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 3px 8px; font: inherit; font-size: 12px;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:active { background: #232a36; }
+input[type=number] { width: 76px; text-align: right; }
+label { color: var(--fg-dim); font-size: 12px; }
+
+main { flex: 1 1 auto; display: grid; grid-template-columns: 392px 1fr; min-height: 0; }
+
+#left {
+  background: var(--panel); border-right: 1px solid var(--line);
+  overflow-y: auto; padding: 8px 10px 16px; min-height: 0;
+}
+#left section { margin-bottom: 14px; }
+#left h2 {
+  font-size: 12px; margin: 0 0 6px; padding-bottom: 3px;
+  border-bottom: 1px solid var(--line); color: var(--accent); font-weight: 600;
+}
+.field { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.field label { flex: 0 0 96px; }
+.field .hint { color: var(--fg-dim); font-size: 11px; }
+.row2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+#coeffTable { border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.grp {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
+  padding: 3px 6px; background: var(--panel2); border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.grp:first-child { border-top: none; }
+.grp .caret { width: 10px; color: var(--fg-dim); }
+.grp .cnt { color: var(--fg-dim); margin-left: auto; font-size: 11px; }
+.grp.has-nz .cnt { color: var(--accent2); }
+.crow {
+  display: grid; grid-template-columns: 30px 52px 1fr 74px 96px;
+  gap: 4px; align-items: center; padding: 1px 6px; font-size: 11px;
+}
+.crow:hover { background: #1a1f2a; }
+.crow.nz { background: #1b2331; }
+.crow .j { color: var(--fg-dim); text-align: right; }
+.crow .nm { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.crow .nme { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow input[type=number] { width: 100%; padding: 1px 4px; font-size: 11px; }
+.crow input[type=range] { width: 100%; accent-color: var(--accent); }
+
+#right { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 8px; gap: 8px; }
+.views { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: 1 1 auto; min-height: 0; }
+figure { margin: 0; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+figcaption { font-size: 11px; color: var(--fg-dim); padding-bottom: 3px; }
+.viewbox { display: flex; gap: 6px; flex: 1 1 auto; min-height: 0; }
+.canvas-wrap {
+  position: relative; flex: 1 1 auto; min-width: 0; min-height: 0;
+  background: #000; border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+}
+.canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.cbar { flex: 0 0 46px; display: flex; flex-direction: column; align-items: stretch; font-size: 10px; color: var(--fg-dim); }
+.cbar canvas { width: 14px; flex: 1 1 auto; border: 1px solid var(--line); align-self: center; }
+.cbar .hi, .cbar .lo { text-align: center; padding: 1px 0; font-variant-numeric: tabular-nums; }
+
+#plotWrap { flex: 0 0 132px; }
+#plot { width: 100%; height: 110px; display: block; border: 1px solid var(--line); border-radius: 3px; }
+
+#metrics {
+  flex: 0 0 auto; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 8px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 10px; font-size: 12px;
+}
+#metrics .m { display: flex; gap: 6px; }
+#metrics .m b { color: var(--fg-dim); font-weight: 400; min-width: 74px; }
+#metrics .m span { font-variant-numeric: tabular-nums; }
+#metrics .full { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; padding-top: 2px; }
+
+footer {
+  flex: 0 0 auto; display: flex; gap: 14px; align-items: center;
+  padding: 3px 12px; background: var(--panel); border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums;
+}
+footer .warn { color: var(--warn); }
+
+dialog {
+  background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 6px; max-width: 640px; padding: 16px;
+}
+dialog::backdrop { background: rgba(0, 0, 0, .6); }
+dialog h3 { margin: 0 0 8px; font-size: 14px; }
+dialog table { border-collapse: collapse; font-size: 12px; }
+dialog td, dialog th { border: 1px solid var(--line); padding: 2px 8px; text-align: left; }
+#errBox {
+  display: none; margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--warn);
+  border-radius: 4px; color: var(--warn); font-size: 11px; white-space: pre-wrap;
+  max-height: 120px; overflow: auto;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Zernike PSF Viewer</h1>
+    <button id="btnClear" title="全係数をゼロにする (Ctrl+N)">クリア</button>
+    <button id="btnRandom" title="ランダムな収差を生成">ランダム</button>
+    <button id="btnUndo" title="元に戻す (Ctrl+Z)">元に戻す</button>
+    <button id="btnRedo" title="やり直し (Ctrl+Y)">やり直し</button>
+    <span class="spacer"></span>
+    <button id="btnLoad" title="設定 JSON を読み込む (Ctrl+O)">JSON 読込</button>
+    <button id="btnSave" title="設定 JSON を保存 (Ctrl+S)">JSON 保存</button>
+    <button id="btnCsvIn" title="係数 CSV を読み込む">CSV 読込</button>
+    <button id="btnCsvOut" title="係数 CSV を保存">CSV 保存</button>
+    <button id="btnPng" title="表示中の画像を PNG 保存 (Ctrl+E)">PNG 保存</button>
+    <button id="btnHelp" title="ヘルプ (F1)">ヘルプ</button>
+  </header>
+
+  <div id="errBox"></div>
+
+  <main>
+    <aside id="left">
+      <section>
+        <h2>グリッド設定</h2>
+        <div class="field">
+          <label for="inN">配列サイズ N</label>
+          <select id="inN">
+            <option>256</option><option>512</option><option selected>1024</option><option>2048</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="inQ">サンプリング q</label>
+          <input type="number" id="inQ" value="4" min="1" max="32" step="0.5">
+          <span class="hint">λ/D あたりの画素数</span>
+        </div>
+        <div class="field">
+          <label>瞳直径</label>
+          <span class="hint" id="outDpix">–</span>
+        </div>
+        <div class="field">
+          <label for="inPreview">プレビュー N</label>
+          <select id="inPreview">
+            <option>256</option><option selected>512</option><option value="0">使わない</option>
+          </select>
+        </div>
+      </section>
+
+      <section>
+        <h2>瞳マスク</h2>
+        <div class="field">
+          <label for="inShape">形状</label>
+          <select id="inShape">
+            <option value="circular" selected>円形</option>
+            <option value="rectangular">矩形</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="inEps">中心遮蔽 ε</label>
+          <input type="number" id="inEps" value="0" min="0" max="0.9" step="0.05">
+        </div>
+        <div class="field">
+          <label for="inSpider">スパイダー</label>
+          <select id="inSpider">
+            <option value="0" selected>なし</option><option value="3">3 本</option><option value="4">4 本</option>
+          </select>
+          <input type="number" id="inSpiderW" value="2" min="0.5" max="20" step="0.5" title="幅 [画素]">
+        </div>
+        <div class="field">
+          <label for="inApod">アポダイズ</label>
+          <select id="inApod">
+            <option value="none" selected>なし</option><option value="gaussian">ガウシアン</option>
+          </select>
+          <input type="number" id="inApodW" value="0.7" min="0.1" max="3" step="0.1" title="幅 w">
+        </div>
+      </section>
+
+      <section>
+        <h2>Zernike 係数</h2>
+        <div class="row2">
+          <label for="inUnit">単位</label>
+          <select id="inUnit">
+            <option value="rad" selected>rad</option>
+            <option value="waves">λ</option>
+            <option value="nm">nm</option>
+          </select>
+          <label for="inLambda">λ [nm]</label>
+          <input type="number" id="inLambda" value="550" min="100" max="20000" step="10">
+        </div>
+        <div class="row2" style="margin-top:4px">
+          <label for="inNmax">n<sub>max</sub></label>
+          <select id="inNmax">
+            <option>4</option><option>6</option><option>10</option><option selected>20</option>
+          </select>
+          <label for="inRange">スライダ範囲 ±</label>
+          <input type="number" id="inRange" value="2" min="0.1" max="20" step="0.1">
+        </div>
+        <div class="row2" style="margin-top:4px">
+          <input type="text" id="inFilter" placeholder="番号・名称で絞り込み" style="flex:1">
+          <label><input type="checkbox" id="inNonZero"> 非ゼロのみ</label>
+        </div>
+        <div class="row2" style="margin-top:4px">
+          <button id="btnExpandAll">すべて展開</button>
+          <button id="btnCollapseAll">すべて折りたたむ</button>
+        </div>
+        <div id="coeffTable" style="margin-top:6px"></div>
+      </section>
+    </aside>
+
+    <section id="right">
+      <div class="views">
+        <figure>
+          <figcaption>瞳面（波面）[rad]</figcaption>
+          <div class="viewbox">
+            <div class="canvas-wrap"><canvas id="cvPupil"></canvas></div>
+            <div class="cbar"><div class="hi" id="pupHi">–</div><canvas id="cbPupil" width="14" height="200"></canvas><div class="lo" id="pupLo">–</div></div>
+          </div>
+        </figure>
+        <figure>
+          <figcaption>PSF（強度、総和正規化）</figcaption>
+          <div class="viewbox">
+            <div class="canvas-wrap"><canvas id="cvPsf"></canvas></div>
+            <div class="cbar"><div class="hi" id="psfHi">–</div><canvas id="cbPsf" width="14" height="200"></canvas><div class="lo" id="psfLo">–</div></div>
+          </div>
+        </figure>
+      </div>
+
+      <div class="row2">
+        <label for="inPupilView">瞳面表示</label>
+        <select id="inPupilView">
+          <option value="wavefront" selected>波面（位相）</option>
+          <option value="amplitude">振幅</option>
+        </select>
+        <label for="inPupCmap">配色</label>
+        <select id="inPupCmap"></select>
+        <span style="width:12px"></span>
+        <label for="inScale">PSF</label>
+        <select id="inScale">
+          <option value="log" selected>対数</option><option value="linear">リニア</option><option value="gamma">γ 補正</option>
+        </select>
+        <input type="number" id="inFloor" value="-50" min="-120" max="-5" step="5" title="対数下限 [dB]">
+        <input type="number" id="inGamma" value="0.4" min="0.05" max="1" step="0.05" title="γ" style="display:none">
+        <label for="inZoom">ズーム ±</label>
+        <input type="number" id="inZoom" value="16" min="0.5" max="256" step="0.5" title="λ/D">
+        <label for="inPsfCmap">配色</label>
+        <select id="inPsfCmap"></select>
+      </div>
+
+      <figure id="plotWrap">
+        <figcaption>断面（PSF 水平カット / 理想 Airy）</figcaption>
+        <canvas id="plot"></canvas>
+      </figure>
+
+      <div id="metrics">
+        <div class="m"><b>RMS</b><span id="mRms">–</span></div>
+        <div class="m"><b>PV</b><span id="mPv">–</span></div>
+        <div class="m"><b>Strehl (定義)</b><span id="mStrehl">–</span></div>
+        <div class="m"><b>Strehl (ピーク)</b><span id="mStrehlPk">–</span></div>
+        <div class="m"><b>Maréchal</b><span id="mMarechal">–</span></div>
+        <div class="m"><b>FWHM</b><span id="mFwhm">–</span></div>
+        <div class="m"><b>EE(3 λ/D)</b><span id="mEe">–</span></div>
+        <div class="m"><b>非ゼロ項</b><span id="mModes">–</span></div>
+        <div class="full">
+          <label><input type="checkbox" id="inExclude" checked> ピストン/チルトを除外して指標を計算</label>
+          <span class="hint" id="mNote"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="stGrid">–</span>
+    <span id="stCursor">–</span>
+    <span id="stTime">–</span>
+    <span id="stBackend">–</span>
+    <span id="stCache">–</span>
+  </footer>
+
+  <input type="file" id="filePicker" accept=".json,.csv,.txt" style="display:none">
+
+  <dialog id="dlgHelp">
+    <h3>Zernike PSF Viewer</h3>
+    <p style="font-size:12px">
+      Zernike 係数（Noll インデックス、Noll 正規化、位相は rad）から瞳関数
+      <code>P = A·exp(iW)</code> を作り、<code>PSF = |FFT2(P)|²</code>（総和正規化）を表示します。
+      規約は <code>torchmfbd/zern.py</code> に準拠しています。
+    </p>
+    <table>
+      <tr><th>キー</th><th>動作</th></tr>
+      <tr><td>Ctrl+N</td><td>全係数をクリア</td></tr>
+      <tr><td>Ctrl+O / Ctrl+S</td><td>設定の読込 / 保存</td></tr>
+      <tr><td>Ctrl+E</td><td>PNG エクスポート</td></tr>
+      <tr><td>Ctrl+Z / Ctrl+Y</td><td>元に戻す / やり直し</td></tr>
+      <tr><td>Ctrl+F</td><td>係数の絞り込み欄にフォーカス</td></tr>
+      <tr><td>↑ / ↓</td><td>選択中の係数を ±0.05 rad</td></tr>
+      <tr><td>Shift+↑ / ↓</td><td>±0.005 rad</td></tr>
+      <tr><td>PageUp / PageDown</td><td>±0.5 rad</td></tr>
+      <tr><td>L</td><td>PSF をリニア ⇔ 対数</td></tr>
+      <tr><td>R</td><td>表示レンジを自動調整</td></tr>
+      <tr><td>ホイール</td><td>PSF のズーム</td></tr>
+      <tr><td>F1</td><td>このヘルプ</td></tr>
+    </table>
+    <p style="font-size:11px;color:#8b93a7;margin-top:10px">
+      注意: 中心遮蔽・スパイダー・矩形瞳では Zernike の直交性が崩れるため、
+      RMS は係数の二乗和ではなくマップから数値的に計算しています。<br>
+      計算は Web Worker で行い、起動しない環境では自動的にメインスレッドへ切り替えます
+      （画面右下に表示）。URL の末尾に <code>?backend=main</code> を付けると固定できます。
+    </p>
+    <form method="dialog" style="margin-top:8px"><button>閉じる</button></form>
+  </dialog>
+</div>
+
+<script type="text/plain" id="zpv-worker-src">
+/* Noll インデックスと (n, m) の相互変換、および他方式への変換。
+ * SPEC.md §5.3 / 規約 R-1。参照実装 torchmfbd/zern.py の zernIndex に準拠する。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var N_MAX = 20;
+  var J_MAX = ((N_MAX + 1) * (N_MAX + 2)) / 2; // 231
+
+  /* zern.py: zernIndex(j) の転記。j は 1 始まり。 */
+  function nollToNM(j) {
+    var n = Math.floor((-1 + Math.sqrt(8 * (j - 1) + 1)) / 2);
+    var p = j - (n * (n + 1)) / 2;
+    var k = n % 2;
+    var m = Math.floor((p + k) / 2) * 2 - k;
+    if (m !== 0) m *= j % 2 === 0 ? 1 : -1;
+    return { n: n, m: m };
+  }
+
+  /* j -> (n,m) を一度だけ展開し、逆引き表も作る。231 件しかないため十分。 */
+  var TABLE = [];
+  var REVERSE = new Map();
+  for (var j = 1; j <= J_MAX; j++) {
+    var nm = nollToNM(j);
+    TABLE.push(nm);
+    REVERSE.set(nm.n + ':' + nm.m, j);
+  }
+
+  function nmToNoll(n, m) {
+    var j = REVERSE.get(n + ':' + m);
+    if (j === undefined) throw new RangeError('対応する Noll 番号がありません: n=' + n + ', m=' + m);
+    return j;
+  }
+
+  /* OSA / ANSI: j = (n(n+2) + m) / 2 、0 始まり */
+  function nmToOsa(n, m) {
+    return (n * (n + 2) + m) / 2;
+  }
+
+  /* Fringe: j = (1 + (n+|m|)/2)^2 - 2|m| + floor((1 - sgn m)/2) 、1 始まり */
+  function nmToFringe(n, m) {
+    var am = Math.abs(m);
+    var sgn = m > 0 ? 1 : m < 0 ? -1 : 0;
+    return Math.pow(1 + (n + am) / 2, 2) - 2 * am + Math.floor((1 - sgn) / 2);
+  }
+
+  var ORDER_PREFIX = ['', '二次', '三次', '四次', '五次', '六次', '七次', '八次', '九次', '十次', '十一次'];
+  var FOIL = {
+    3: 'トレフォイル',
+    4: 'クアドラフォイル',
+    5: 'ペンタフォイル',
+    6: 'ヘキサフォイル'
+  };
+
+  function orderPrefix(k) {
+    return k < ORDER_PREFIX.length ? ORDER_PREFIX[k] : k + 1 + '次';
+  }
+
+  /* 表示用の日本語名称。(n, m) が正であり、名称は表示用ラベルにすぎない。 */
+  function modeName(n, m) {
+    var am = Math.abs(m);
+    var k = (n - am) / 2; // 同じ |m| の中での次数
+    var base;
+    if (am === 0) {
+      if (n === 0) return 'ピストン';
+      if (n === 2) return 'デフォーカス';
+      base = orderPrefix(k - 2) + '球面収差';
+      return base;
+    }
+    if (am === 1) {
+      base = k === 0 ? 'チルト' : orderPrefix(k - 1) + 'コマ収差';
+    } else if (am === 2) {
+      base = orderPrefix(k) + '非点収差';
+    } else {
+      base = orderPrefix(k) + (FOIL[am] || am + '葉収差');
+    }
+    var suffix;
+    if (am === 2) suffix = m > 0 ? ' (0/90°)' : ' (±45°)';
+    else suffix = m > 0 ? ' (X)' : ' (Y)';
+    return base + suffix;
+  }
+
+  /* radial order n に属する Noll 番号の範囲 [first, last] */
+  function nollRangeForOrder(n) {
+    return [(n * (n + 1)) / 2 + 1, ((n + 1) * (n + 2)) / 2];
+  }
+
+  ZPV.noll = {
+    N_MAX: N_MAX,
+    J_MAX: J_MAX,
+    nollToNM: nollToNM,
+    nmToNoll: nmToNoll,
+    nmToOsa: nmToOsa,
+    nmToFringe: nmToFringe,
+    modeName: modeName,
+    nollRangeForOrder: nollRangeForOrder,
+    table: TABLE
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* Zernike 多項式。SPEC.md §5.2 / §5.10、規約 R-2 / R-3。
+ *
+ * 動径多項式の係数は BigInt で厳密に計算する。n = 20 では定義式に
+ * 20! = 2.43e18 が現れ、倍精度の整数厳密範囲 2^53 を超えるため。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var FACT = [1n];
+  function factorial(k) {
+    for (var i = FACT.length; i <= k; i++) FACT[i] = FACT[i - 1] * BigInt(i);
+    return FACT[k];
+  }
+
+  /* R_n^|m|(rho) を rho^|m| * P(rho^2) の形に分解したときの P の係数。
+   * 返り値 coeffs[t] は rho^(|m| + 2t) の係数（t 昇順）。すべて整数。 */
+  var radialCache = new Map();
+  function radialCoefficients(n, m) {
+    var am = Math.abs(m);
+    if (am > n || (n - am) % 2 !== 0) return null; // R は恒等的に 0
+    var key = n + ':' + am;
+    var hit = radialCache.get(key);
+    if (hit) return hit;
+
+    var half = (n - am) / 2;
+    var coeffs = new Float64Array(half + 1);
+    for (var s = 0; s <= half; s++) {
+      var num = factorial(n - s);
+      var den = factorial(s) * factorial((n + am) / 2 - s) * factorial(half - s);
+      if (num % den !== 0n) {
+        throw new Error('Zernike 動径係数が整数になりません: n=' + n + ', m=' + m + ', s=' + s);
+      }
+      var c = Number(num / den);
+      // rho^(n-2s) = rho^(|m| + 2t) なので t = half - s
+      coeffs[half - s] = s % 2 === 0 ? c : -c;
+    }
+    radialCache.set(key, coeffs);
+    return coeffs;
+  }
+
+  /* 正規化係数（規約 R-2）。n = m = 0 のピストンは 1。 */
+  function normFactor(n, m) {
+    if (m === 0) return n === 0 ? 1 : Math.sqrt(n + 1);
+    return Math.sqrt(2) * Math.sqrt(n + 1);
+  }
+
+  /* R_n^|m|(rho) を Horner 法で評価する。 */
+  function radial(n, m, rho) {
+    var coeffs = radialCoefficients(n, m);
+    if (!coeffs) return 0;
+    var r2 = rho * rho;
+    var acc = coeffs[coeffs.length - 1];
+    for (var t = coeffs.length - 2; t >= 0; t--) acc = acc * r2 + coeffs[t];
+    var am = Math.abs(m);
+    return am === 0 ? acc : acc * Math.pow(rho, am);
+  }
+
+  /* 正規化済み Zernike Z_j(rho, theta)（規約 R-2 / R-3）。 */
+  function zernike(n, m, rho, theta) {
+    if (n === 0 && m === 0) return 1;
+    var r = radial(n, m, rho) * normFactor(n, m);
+    if (m === 0) return r;
+    return m > 0 ? r * Math.cos(m * theta) : r * Math.sin(-m * theta);
+  }
+
+  /* グリッドのマスク内サンプルに対して 1 モードを評価する。
+   * 既定はメモリ節約のため Float32Array（SPEC.md AR-1）。
+   * useFloat64 = true で倍精度の配列を返す（参照 fixture との突き合わせ用）。 */
+  function zernikeMapPacked(n, m, grid, useFloat64) {
+    var count = grid.count;
+    var out = useFloat64 ? new Float64Array(count) : new Float32Array(count);
+    var rho = grid.rho;
+    var theta = grid.theta;
+    if (n === 0 && m === 0) {
+      out.fill(1);
+      return out;
+    }
+    var coeffs = radialCoefficients(n, m);
+    if (!coeffs) return out; // 恒等的に 0
+    var nf = normFactor(n, m);
+    var am = Math.abs(m);
+    var last = coeffs.length - 1;
+    for (var i = 0; i < count; i++) {
+      var p = rho[i];
+      var r2 = p * p;
+      var acc = coeffs[last];
+      for (var t = last - 1; t >= 0; t--) acc = acc * r2 + coeffs[t];
+      if (am !== 0) acc *= Math.pow(p, am);
+      acc *= nf;
+      if (m > 0) acc *= Math.cos(m * theta[i]);
+      else if (m < 0) acc *= Math.sin(am * theta[i]);
+      out[i] = acc;
+    }
+    return out;
+  }
+
+  ZPV.zernike = {
+    radialCoefficients: radialCoefficients,
+    normFactor: normFactor,
+    radial: radial,
+    zernike: zernike,
+    zernikeMapPacked: zernikeMapPacked
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 瞳グリッドと瞳マスク。SPEC.md §5.4 / §5.6、規約 R-4。
+ *
+ * グリッドは参照実装と同じ「端点を含む」格子:
+ *     x[i] = -1 + 2i/(N-1),  rho = q * sqrt(x^2 + y^2),  theta = atan2(y, x)
+ * したがって瞳直径は (N-1)/q 画素になる（画素中心格子ではない）。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var DEFAULT_PUPIL = {
+    shape: 'circular', // 'circular' | 'rectangular'
+    obscurationRatio: 0,
+    spider: { count: 0, widthPixels: 2, rotationDeg: 0 },
+    apodization: { type: 'none', width: 1 }, // 'none' | 'gaussian'
+    rect: { halfWidth: 1, halfHeight: 1 }
+  };
+
+  function merge(base, over) {
+    var out = {};
+    var k;
+    for (k in base) out[k] = base[k];
+    if (over) {
+      for (k in over) {
+        if (over[k] && typeof over[k] === 'object' && !Array.isArray(over[k])) {
+          out[k] = merge(base[k] || {}, over[k]);
+        } else if (over[k] !== undefined) {
+          out[k] = over[k];
+        }
+      }
+    }
+    return out;
+  }
+
+  /* 入力の検証。異常値で黙って空の結果を返さないようにする（SPEC.md IT-05）。
+   * 2 のべき乗が要るのは FFT だけなので、格子生成では要求しない
+   * （直交性の検証には q=1, N=513 のような格子を使う）。 */
+  function validate(N, q, requirePowerOfTwo) {
+    if (typeof N !== 'number' || !isFinite(N) || N !== Math.floor(N) || N < 8 || N > 8192) {
+      throw new RangeError('配列サイズ N は 8〜8192 の整数である必要があります: ' + N);
+    }
+    if (requirePowerOfTwo && (N & (N - 1)) !== 0) {
+      throw new RangeError('FFT を使うため配列サイズ N は 2 のべき乗である必要があります: ' + N);
+    }
+    if (typeof q !== 'number' || !isFinite(q) || q <= 0) {
+      throw new RangeError('サンプリング q は正の有限値である必要があります: ' + q);
+    }
+  }
+
+  /* N x N の格子を作り、マスク内サンプルだけをパックして返す。 */
+  function buildGrid(N, q, pupilOpts) {
+    validate(N, q, false);
+    var opt = merge(DEFAULT_PUPIL, pupilOpts);
+    var step = 2 / (N - 1);
+    var xs = new Float64Array(N);
+    for (var i = 0; i < N; i++) xs[i] = -1 + step * i;
+
+    var eps = opt.obscurationRatio || 0;
+    var spider = opt.spider || DEFAULT_PUPIL.spider;
+    var spiderHalf = spider.count > 0 ? (spider.widthPixels * step) / 2 : 0;
+    var spiderRot = ((spider.rotationDeg || 0) * Math.PI) / 180;
+    var apod = opt.apodization || DEFAULT_PUPIL.apodization;
+    var rect = opt.rect || DEFAULT_PUPIL.rect;
+
+    // 1 パス目: マスク内画素数と行範囲を数える
+    var idx = [];
+    var rowMin = N;
+    var rowMax = -1;
+    var row, col, x, y, r, rr, inside, a, k, ang, dist;
+
+    for (row = 0; row < N; row++) {
+      y = xs[row];
+      for (col = 0; col < N; col++) {
+        x = xs[col];
+        rr = Math.sqrt(x * x + y * y);
+        r = q * rr;
+        if (opt.shape === 'rectangular') {
+          inside = q * Math.abs(x) <= rect.halfWidth && q * Math.abs(y) <= rect.halfHeight;
+        } else {
+          inside = r <= 1 && r >= eps;
+        }
+        if (inside && spider.count > 0 && spiderHalf > 0) {
+          // count は「腕の本数」。各腕は中心から外向きの半直線なので、
+          // 直線ではなく半直線（射影が正の側）だけを遮蔽する。
+          for (k = 0; k < spider.count; k++) {
+            ang = spiderRot + (2 * Math.PI * k) / spider.count;
+            var dxk = Math.cos(ang);
+            var dyk = Math.sin(ang);
+            if (x * dxk + y * dyk < 0) continue; // 反対側は別の腕が担当する
+            dist = Math.abs(x * dyk - y * dxk);
+            if (dist <= spiderHalf) {
+              inside = false;
+              break;
+            }
+          }
+        }
+        if (inside) {
+          idx.push(row * N + col);
+          if (row < rowMin) rowMin = row;
+          if (row > rowMax) rowMax = row;
+        }
+      }
+    }
+
+    var count = idx.length;
+    var grid = {
+      N: N,
+      q: q,
+      pupilDiameterPx: (N - 1) / q,
+      count: count,
+      index: Int32Array.from(idx),
+      rho: new Float64Array(count),
+      theta: new Float64Array(count),
+      amp: new Float64Array(count),
+      rowMin: rowMin < 0 ? 0 : rowMin,
+      rowMax: rowMax < 0 ? -1 : rowMax,
+      options: opt,
+      ampSum: 0,
+      ampSqSum: 0
+    };
+
+    for (var t = 0; t < count; t++) {
+      var lin = grid.index[t];
+      row = (lin / N) | 0;
+      col = lin - row * N;
+      y = xs[row];
+      x = xs[col];
+      r = q * Math.sqrt(x * x + y * y);
+      grid.rho[t] = r;
+      grid.theta[t] = Math.atan2(y, x);
+      a = 1;
+      if (apod.type === 'gaussian') a = Math.exp(-Math.pow(r / (apod.width || 1), 2));
+      grid.amp[t] = a;
+      grid.ampSum += a;
+      grid.ampSqSum += a * a;
+    }
+    return grid;
+  }
+
+  /* グリッドの同一性判定に使うキー。変わったら基底キャッシュを捨てる。 */
+  function gridKey(N, q, pupilOpts) {
+    return JSON.stringify([N, q, merge(DEFAULT_PUPIL, pupilOpts)]);
+  }
+
+  ZPV.pupil = {
+    DEFAULT_PUPIL: DEFAULT_PUPIL,
+    validate: validate,
+    buildGrid: buildGrid,
+    gridKey: gridKey,
+    merge: merge
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* radix-2 Cooley-Tukey による複素 FFT。SPEC.md §5.10。
+ *
+ * 2 次元版は行→列の 2 パス。瞳の外側の行は全要素 0 なので、行パスは
+ * [rowMin, rowMax] の範囲だけ計算すればよい（SPEC.md §3.5 の最適化 1）。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var twiddleCache = new Map();
+
+  function twiddles(n) {
+    var hit = twiddleCache.get(n);
+    if (hit) return hit;
+    // 各段 length = 2,4,...,n の w = exp(-2*pi*i/length) の冪乗を平坦に格納
+    var cos = new Float64Array(n);
+    var sin = new Float64Array(n);
+    for (var i = 0; i < n; i++) {
+      var ang = (-2 * Math.PI * i) / n;
+      cos[i] = Math.cos(ang);
+      sin[i] = Math.sin(ang);
+    }
+    var rev = new Int32Array(n);
+    var bits = Math.log2(n) | 0;
+    for (var j = 0; j < n; j++) {
+      var r = 0;
+      for (var b = 0; b < bits; b++) if (j & (1 << b)) r |= 1 << (bits - 1 - b);
+      rev[j] = r;
+    }
+    var t = { cos: cos, sin: sin, rev: rev, n: n };
+    twiddleCache.set(n, t);
+    return t;
+  }
+
+  /* re/im の [offset, offset + n*stride) を in-place で 1 次元 FFT する。 */
+  function fft1d(re, im, n, offset, stride, tw) {
+    var rev = tw.rev;
+    var i, j, a, b, len, half, step, k, ar, ai, br, bi, wr, wi, tr, ti;
+
+    for (i = 0; i < n; i++) {
+      j = rev[i];
+      if (i < j) {
+        a = offset + i * stride;
+        b = offset + j * stride;
+        tr = re[a]; re[a] = re[b]; re[b] = tr;
+        ti = im[a]; im[a] = im[b]; im[b] = ti;
+      }
+    }
+
+    for (len = 2; len <= n; len <<= 1) {
+      half = len >> 1;
+      step = n / len;
+      for (i = 0; i < n; i += len) {
+        for (k = 0; k < half; k++) {
+          wr = tw.cos[k * step];
+          wi = tw.sin[k * step];
+          a = offset + (i + k) * stride;
+          b = offset + (i + k + half) * stride;
+          br = re[b]; bi = im[b];
+          tr = br * wr - bi * wi;
+          ti = br * wi + bi * wr;
+          ar = re[a]; ai = im[a];
+          re[b] = ar - tr; im[b] = ai - ti;
+          re[a] = ar + tr; im[a] = ai + ti;
+        }
+      }
+    }
+  }
+
+  var BLOCK = 32;
+
+  /* 正方行列の in-place 転置（キャッシュのためブロック単位で行う）。 */
+  function transpose(a, N) {
+    for (var i0 = 0; i0 < N; i0 += BLOCK) {
+      for (var j0 = i0; j0 < N; j0 += BLOCK) {
+        var iMax = Math.min(i0 + BLOCK, N);
+        var jMax = Math.min(j0 + BLOCK, N);
+        for (var i = i0; i < iMax; i++) {
+          for (var j = j0 === i0 ? i + 1 : j0; j < jMax; j++) {
+            var p = i * N + j;
+            var q = j * N + i;
+            var t = a[p];
+            a[p] = a[q];
+            a[q] = t;
+          }
+        }
+      }
+    }
+  }
+
+  /* N x N の複素配列（row-major）を in-place で 2 次元 FFT する。
+   *
+   * 列パスは stride N のアクセスになりキャッシュミスで極端に遅くなるため、
+   * ブロック転置してから行パスを掛け、転置で戻す。N=1024 で列パスが
+   * 134 ms -> 29 ms になる（転置 2 回分を含めても 3 倍以上速い）。
+   *
+   * opts.rowMin / opts.rowMax を与えると、その範囲外の行の行パスを省略する
+   * （その行が全て 0 であることが前提）。 */
+  function fft2(re, im, N, opts) {
+    var tw = twiddles(N);
+    var rowMin = 0;
+    var rowMax = N - 1;
+    if (opts && opts.rowMin !== undefined && opts.rowMax !== undefined && opts.rowMax >= opts.rowMin) {
+      rowMin = opts.rowMin;
+      rowMax = opts.rowMax;
+    }
+    var row;
+    for (row = rowMin; row <= rowMax; row++) fft1d(re, im, N, row * N, 1, tw);
+
+    transpose(re, N);
+    transpose(im, N);
+    for (row = 0; row < N; row++) fft1d(re, im, N, row * N, 1, tw);
+    transpose(re, N);
+    transpose(im, N);
+  }
+
+  /* 素朴な DFT。テスト用の参照。 */
+  function dft1dNaive(re, im) {
+    var n = re.length;
+    var outRe = new Float64Array(n);
+    var outIm = new Float64Array(n);
+    for (var k = 0; k < n; k++) {
+      var sr = 0;
+      var si = 0;
+      for (var t = 0; t < n; t++) {
+        var ang = (-2 * Math.PI * k * t) / n;
+        var c = Math.cos(ang);
+        var s = Math.sin(ang);
+        sr += re[t] * c - im[t] * s;
+        si += re[t] * s + im[t] * c;
+      }
+      outRe[k] = sr;
+      outIm[k] = si;
+    }
+    return { re: outRe, im: outIm };
+  }
+
+  /* 象限を入れ替えて原点を配列中央に移す（表示用）。 */
+  function fftshift(src, N, dst) {
+    var out = dst || new Float32Array(N * N);
+    var h = N >> 1;
+    for (var row = 0; row < N; row++) {
+      var sr = (row + h) % N;
+      for (var col = 0; col < N; col++) {
+        out[row * N + col] = src[sr * N + ((col + h) % N)];
+      }
+    }
+    return out;
+  }
+
+  ZPV.fft = { fft1d: fft1d, fft2: fft2, fftshift: fftshift, dft1dNaive: dft1dNaive, twiddles: twiddles, transpose: transpose };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* Zernike 基底マップの遅延生成・パック格納・LRU キャッシュ。SPEC.md §4.3。
+ *
+ * AR-1 マスク内画素のみを Float32Array にパックして保持
+ * AR-2 係数が非ゼロになった項だけ生成する（遅延生成）
+ * AR-3 LRU で上限（既定 128 MB）を守る
+ * AR-5 グリッドが変わったら全破棄
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var DEFAULT_LIMIT_BYTES = 128 * 1024 * 1024;
+
+  function BasisCache(limitBytes) {
+    this.limitBytes = limitBytes || DEFAULT_LIMIT_BYTES;
+    this.map = new Map(); // key -> Float32Array（Map は挿入順を保つので LRU に使える）
+    this.bytes = 0;
+    this.gridKey = null;
+    this.grid = null;
+    this.hits = 0;
+    this.misses = 0;
+  }
+
+  BasisCache.prototype.setGrid = function (grid, gridKey) {
+    if (this.gridKey !== gridKey) {
+      this.map.clear();
+      this.bytes = 0;
+      this.gridKey = gridKey;
+    }
+    this.grid = grid;
+  };
+
+  BasisCache.prototype.get = function (n, m) {
+    if (!this.grid) throw new Error('グリッドが未設定です');
+    var key = n + ':' + m;
+    var hit = this.map.get(key);
+    if (hit) {
+      this.hits++;
+      this.map.delete(key); // 末尾に移動して最近使用扱いにする
+      this.map.set(key, hit);
+      return hit;
+    }
+    this.misses++;
+    var mapData = ZPV.zernike.zernikeMapPacked(n, m, this.grid);
+    this.map.set(key, mapData);
+    this.bytes += mapData.byteLength;
+    this.evict();
+    return mapData;
+  };
+
+  BasisCache.prototype.evict = function () {
+    while (this.bytes > this.limitBytes && this.map.size > 1) {
+      var oldest = this.map.keys().next().value;
+      var v = this.map.get(oldest);
+      this.map.delete(oldest);
+      this.bytes -= v.byteLength;
+    }
+  };
+
+  BasisCache.prototype.stats = function () {
+    return { entries: this.map.size, bytes: this.bytes, hits: this.hits, misses: this.misses };
+  };
+
+  ZPV.BasisCache = BasisCache;
+  ZPV.DEFAULT_BASIS_LIMIT_BYTES = DEFAULT_LIMIT_BYTES;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 波面 → 瞳関数 → PSF。SPEC.md §5.5 / §5.6 / §5.7、規約 R-5 / R-6。
+ *
+ *   W  = Σ a_j Z_j            [rad]
+ *   P  = A · exp(i·W)
+ *   PSF = |FFT2(P)|^2 を総和で正規化
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  /* coeffs: { nollJ: value[rad] } または Map。非ゼロ項だけを走査する（AR-4）。 */
+  function nonZeroModes(coeffs, excludePistonTilt) {
+    var out = [];
+    var arr = [];
+    if (coeffs instanceof Map) {
+      coeffs.forEach(function (v, k) { arr.push([Number(k), v]); });
+    } else {
+      Object.keys(coeffs).forEach(function (k) { arr.push([Number(k), coeffs[k]]); });
+    }
+    for (var i = 0; i < arr.length; i++) {
+      var j = arr[i][0];
+      var v = arr[i][1];
+      if (!v) continue;
+      if (excludePistonTilt && j <= 3) continue;
+      var nm = ZPV.noll.nollToNM(j);
+      out.push({ j: j, n: nm.n, m: nm.m, value: v });
+    }
+    out.sort(function (a, b) { return a.j - b.j; });
+    return out;
+  }
+
+  /* マスク内サンプルの波面 [rad] */
+  function computeWavefront(grid, cache, coeffs, excludePistonTilt) {
+    var modes = nonZeroModes(coeffs, excludePistonTilt);
+    var wf = new Float64Array(grid.count);
+    for (var k = 0; k < modes.length; k++) {
+      var basis = cache.get(modes[k].n, modes[k].m);
+      var c = modes[k].value;
+      for (var i = 0; i < grid.count; i++) wf[i] += c * basis[i];
+    }
+    return wf;
+  }
+
+  /* 瞳関数を N x N の複素配列に展開して FFT し、|.|^2 を返す（fftshift 前）。 */
+  function computeIntensity(grid, wf, scratch) {
+    var N = grid.N;
+    var size = N * N;
+    var re = scratch && scratch.re && scratch.re.length === size ? scratch.re : new Float64Array(size);
+    var im = scratch && scratch.im && scratch.im.length === size ? scratch.im : new Float64Array(size);
+    re.fill(0);
+    im.fill(0);
+
+    var idx = grid.index;
+    var amp = grid.amp;
+    for (var i = 0; i < grid.count; i++) {
+      var p = idx[i];
+      var a = amp[i];
+      var w = wf ? wf[i] : 0;
+      re[p] = a * Math.cos(w);
+      im[p] = a * Math.sin(w);
+    }
+
+    ZPV.fft.fft2(re, im, N, { rowMin: grid.rowMin, rowMax: grid.rowMax });
+
+    var out = new Float64Array(size);
+    var sum = 0;
+    for (var t = 0; t < size; t++) {
+      var v = re[t] * re[t] + im[t] * im[t];
+      out[t] = v;
+      sum += v;
+    }
+    return { intensity: out, sum: sum, scratch: { re: re, im: im } };
+  }
+
+  /* 総和 1 に正規化し、fftshift した PSF（Float32Array）を返す。 */
+  function computePsf(grid, wf, scratch) {
+    var r = computeIntensity(grid, wf, scratch);
+    var N = grid.N;
+    var size = N * N;
+    var norm = r.sum > 0 ? 1 / r.sum : 0;
+    var shifted = new Float32Array(size);
+    var h = N >> 1;
+    var peak = 0;
+    var peakIndex = 0;
+    for (var row = 0; row < N; row++) {
+      var sr = (row + h) % N;
+      for (var col = 0; col < N; col++) {
+        var v = r.intensity[sr * N + ((col + h) % N)] * norm;
+        var d = row * N + col;
+        shifted[d] = v;
+        if (v > peak) { peak = v; peakIndex = d; }
+      }
+    }
+    return {
+      psf: shifted,
+      peak: peak,
+      peakRow: (peakIndex / N) | 0,
+      peakCol: peakIndex % N,
+      rawSum: r.sum,
+      scratch: r.scratch
+    };
+  }
+
+  /* マスク内の波面を N x N の表示用 Float32Array に展開する。 */
+  function expandToFull(grid, packed, fillValue) {
+    var out = new Float32Array(grid.N * grid.N);
+    if (fillValue) out.fill(fillValue);
+    for (var i = 0; i < grid.count; i++) out[grid.index[i]] = packed[i];
+    return out;
+  }
+
+  function maskFull(grid) {
+    var out = new Uint8Array(grid.N * grid.N);
+    for (var i = 0; i < grid.count; i++) out[grid.index[i]] = 1;
+    return out;
+  }
+
+  ZPV.psf = {
+    nonZeroModes: nonZeroModes,
+    computeWavefront: computeWavefront,
+    computeIntensity: computeIntensity,
+    computePsf: computePsf,
+    expandToFull: expandToFull,
+    maskFull: maskFull
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 評価指標。SPEC.md §5.8。位相の単位は rad。 */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  /* マスク内の PV と、振幅二乗で重み付けした RMS。 */
+  function wavefrontStats(grid, wf) {
+    var n = grid.count;
+    if (n === 0) return { pv: 0, rms: 0, mean: 0 };
+    var wsum = 0;
+    var wwsum = 0;
+    var min = Infinity;
+    var max = -Infinity;
+    var i, a2, v;
+    for (i = 0; i < n; i++) {
+      v = wf[i];
+      a2 = grid.amp[i] * grid.amp[i];
+      wsum += a2 * v;
+      wwsum += a2;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    var mean = wwsum > 0 ? wsum / wwsum : 0;
+    var acc = 0;
+    for (i = 0; i < n; i++) {
+      a2 = grid.amp[i] * grid.amp[i];
+      v = wf[i] - mean;
+      acc += a2 * v * v;
+    }
+    return { pv: max - min, rms: wwsum > 0 ? Math.sqrt(acc / wwsum) : 0, mean: mean };
+  }
+
+  /* 定義値の Strehl 比: |Σ A e^{iW}|^2 / (Σ A)^2 */
+  function strehlDefinition(grid, wf) {
+    var sr = 0;
+    var si = 0;
+    var sa = 0;
+    for (var i = 0; i < grid.count; i++) {
+      var a = grid.amp[i];
+      var w = wf ? wf[i] : 0;
+      sr += a * Math.cos(w);
+      si += a * Math.sin(w);
+      sa += a;
+    }
+    if (sa <= 0) return 0;
+    return (sr * sr + si * si) / (sa * sa);
+  }
+
+  /* Maréchal 近似（rad 単位の RMS を使う） */
+  function marechal(rmsRad) {
+    return Math.exp(-rmsRad * rmsRad);
+  }
+
+  /* PSF の放射平均プロファイル。半径の単位は λ/D。 */
+  function radialProfile(psf, N, q, centerRow, centerCol, maxRadiusPx) {
+    var maxR = Math.min(maxRadiusPx || N / 2, N / 2);
+    var nbin = Math.ceil(maxR);
+    var sum = new Float64Array(nbin + 1);
+    var cnt = new Float64Array(nbin + 1);
+    for (var row = 0; row < N; row++) {
+      var dy = row - centerRow;
+      for (var col = 0; col < N; col++) {
+        var dx = col - centerCol;
+        var r = Math.sqrt(dx * dx + dy * dy);
+        if (r > maxR) continue;
+        var b = Math.round(r);
+        sum[b] += psf[row * N + col];
+        cnt[b] += 1;
+      }
+    }
+    var radiusLD = new Float64Array(nbin + 1);
+    var value = new Float64Array(nbin + 1);
+    for (var b2 = 0; b2 <= nbin; b2++) {
+      radiusLD[b2] = b2 / q;
+      value[b2] = cnt[b2] > 0 ? sum[b2] / cnt[b2] : 0;
+    }
+    return { radiusLD: radiusLD, value: value };
+  }
+
+  /* 半値全幅 [λ/D]。放射平均プロファイルを線形補間して求める。 */
+  function fwhm(profile) {
+    var v = profile.value;
+    var r = profile.radiusLD;
+    if (v.length === 0 || v[0] <= 0) return NaN;
+    var half = v[0] / 2;
+    for (var i = 1; i < v.length; i++) {
+      if (v[i] <= half) {
+        var t = (v[i - 1] - half) / (v[i - 1] - v[i]);
+        return 2 * (r[i - 1] + t * (r[i] - r[i - 1]));
+      }
+    }
+    return NaN;
+  }
+
+  /* 半径 radiusLD [λ/D] 内のエネルギー比。psf は総和 1 に正規化済みであること。 */
+  function encircledEnergy(psf, N, q, centerRow, centerCol, radiusLD) {
+    var rpx = radiusLD * q;
+    var r2 = rpx * rpx;
+    var acc = 0;
+    var lo = Math.max(0, Math.floor(centerRow - rpx));
+    var hi = Math.min(N - 1, Math.ceil(centerRow + rpx));
+    for (var row = lo; row <= hi; row++) {
+      var dy = row - centerRow;
+      var span = Math.sqrt(Math.max(0, r2 - dy * dy));
+      var c0 = Math.max(0, Math.floor(centerCol - span));
+      var c1 = Math.min(N - 1, Math.ceil(centerCol + span));
+      for (var col = c0; col <= c1; col++) {
+        var dx = col - centerCol;
+        if (dx * dx + dy * dy <= r2) acc += psf[row * N + col];
+      }
+    }
+    return acc;
+  }
+
+  /* 理想 Airy 分布（強度、ピーク 1）。v = pi * r[λ/D] */
+  function airy(rLD) {
+    if (rLD === 0) return 1;
+    var v = Math.PI * rLD;
+    return Math.pow((2 * besselJ1(v)) / v, 2);
+  }
+
+  /* 1 次ベッセル関数（Abramowitz & Stegun 9.4.4 / 9.4.6 の多項式近似） */
+  function besselJ1(x) {
+    var ax = Math.abs(x);
+    var y, ans1, ans2, ans;
+    if (ax < 8) {
+      y = x * x;
+      ans1 = x * (72362614232.0 + y * (-7895059235.0 + y * (242396853.1 + y * (-2972611.439 + y * (15704.48260 + y * -30.16036606)))));
+      ans2 = 144725228442.0 + y * (2300535178.0 + y * (18583304.74 + y * (99447.43394 + y * (376.9991397 + y))));
+      ans = ans1 / ans2;
+    } else {
+      var z = 8 / ax;
+      y = z * z;
+      var xx = ax - 2.356194491;
+      ans1 = 1.0 + y * (0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * -0.240337019e-6)));
+      ans2 = 0.04687499995 + y * (-0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+      ans = Math.sqrt(0.636619772 / ax) * (Math.cos(xx) * ans1 - z * Math.sin(xx) * ans2);
+      if (x < 0) ans = -ans;
+    }
+    return ans;
+  }
+
+  ZPV.metrics = {
+    wavefrontStats: wavefrontStats,
+    strehlDefinition: strehlDefinition,
+    marechal: marechal,
+    radialProfile: radialProfile,
+    fwhm: fwhm,
+    encircledEnergy: encircledEnergy,
+    airy: airy,
+    besselJ1: besselJ1
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 計算パイプラインのオーケストレーション。SPEC.md §4.2。
+ *
+ * 状態（グリッド設定 + 係数）を受け取り、表示に必要な一式を返す。
+ * DOM を参照しないので Web Worker からも Node のテストからも使える。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  function Engine(options) {
+    options = options || {};
+    this.cache = new ZPV.BasisCache(options.basisLimitBytes);
+    this.grid = null;
+    this.gridKey = null;
+    this.scratch = null;
+    this.idealPeak = 0;
+    this.idealProfile = null;
+  }
+
+  Engine.prototype.ensureGrid = function (N, q, pupilOpts) {
+    ZPV.pupil.validate(N, q, true); // FFT を使うので 2 のべき乗が必要
+    var key = ZPV.pupil.gridKey(N, q, pupilOpts);
+    if (this.gridKey === key && this.grid) return this.grid;
+    this.grid = ZPV.pupil.buildGrid(N, q, pupilOpts);
+    this.gridKey = key;
+    this.cache.setGrid(this.grid, key);
+    this.scratch = null;
+
+    // 同一瞳マスクの無収差 PSF（Strehl の分母と理想プロファイル）
+    var ideal = ZPV.psf.computePsf(this.grid, null, this.scratch);
+    this.scratch = ideal.scratch;
+    this.idealPeak = ideal.peak;
+    this.idealProfile = ZPV.metrics.radialProfile(
+      ideal.psf, N, q, ideal.peakRow, ideal.peakCol, Math.min(N / 2, 32 * q)
+    );
+    return this.grid;
+  };
+
+  /* state: { N, q, pupil, coeffs:{nollJ:value[rad]}, excludePistonTilt, eeRadiusLD } */
+  Engine.prototype.compute = function (state) {
+    var t0 = now();
+    var N = state.N;
+    var q = state.q;
+    var grid = this.ensureGrid(N, q, state.pupil);
+    var tGrid = now();
+
+    // 波面を 2 本同時に作る: 表示用（全項）と指標用（ピストン/チルト除外の可否）
+    var modes = ZPV.psf.nonZeroModes(state.coeffs || {}, false);
+    var wfFull = new Float64Array(grid.count);
+    var exclude = state.excludePistonTilt !== false;
+    var wfMetric = exclude ? new Float64Array(grid.count) : wfFull;
+    for (var k = 0; k < modes.length; k++) {
+      var basis = this.cache.get(modes[k].n, modes[k].m);
+      var c = modes[k].value;
+      var toMetric = exclude && modes[k].j > 3;
+      for (var i = 0; i < grid.count; i++) {
+        var v = c * basis[i];
+        wfFull[i] += v;
+        if (toMetric) wfMetric[i] += v;
+      }
+    }
+    var tWave = now();
+
+    var res = ZPV.psf.computePsf(grid, wfFull, this.scratch);
+    this.scratch = res.scratch;
+    var tFft = now();
+
+    var stats = ZPV.metrics.wavefrontStats(grid, wfMetric);
+    var strehlDef = ZPV.metrics.strehlDefinition(grid, wfMetric);
+    var strehlPeak = this.idealPeak > 0 ? res.peak / this.idealPeak : 0;
+    var profile = ZPV.metrics.radialProfile(
+      res.psf, N, q, res.peakRow, res.peakCol, Math.min(N / 2, 32 * q)
+    );
+    var eeRadius = state.eeRadiusLD || 3;
+    var ee = ZPV.metrics.encircledEnergy(res.psf, N, q, res.peakRow, res.peakCol, eeRadius);
+
+    var wfDisplay = ZPV.psf.expandToFull(grid, wfFull, 0);
+    var wfMin = Infinity;
+    var wfMax = -Infinity;
+    for (var t = 0; t < grid.count; t++) {
+      var w = wfFull[t];
+      if (w < wfMin) wfMin = w;
+      if (w > wfMax) wfMax = w;
+    }
+    if (grid.count === 0) { wfMin = 0; wfMax = 0; }
+    var ampDisplay = ZPV.psf.expandToFull(grid, grid.amp, 0);
+    var tEnd = now();
+
+    return {
+      N: N,
+      q: q,
+      pupilDiameterPx: grid.pupilDiameterPx,
+      maskCount: grid.count,
+      wavefront: wfDisplay,
+      wavefrontMin: wfMin,
+      wavefrontMax: wfMax,
+      amplitude: ampDisplay,
+      mask: ZPV.psf.maskFull(grid),
+      psf: res.psf,
+      psfPeak: res.peak,
+      psfPeakRow: res.peakRow,
+      psfPeakCol: res.peakCol,
+      profile: { radiusLD: profile.radiusLD, value: profile.value },
+      idealProfile: this.idealProfile
+        ? { radiusLD: this.idealProfile.radiusLD, value: this.idealProfile.value }
+        : null,
+      idealPeak: this.idealPeak,
+      metrics: {
+        pv: stats.pv,
+        rms: stats.rms,
+        strehlDefinition: strehlDef,
+        strehlPeak: strehlPeak,
+        marechal: ZPV.metrics.marechal(stats.rms),
+        fwhm: ZPV.metrics.fwhm(profile),
+        ee: ee,
+        eeRadiusLD: eeRadius,
+        modeCount: modes.length,
+        excludePistonTilt: exclude
+      },
+      timings: {
+        grid: tGrid - t0,
+        wavefront: tWave - tGrid,
+        fft: tFft - tWave,
+        metrics: tEnd - tFft,
+        total: tEnd - t0
+      },
+      cache: this.cache.stats()
+    };
+  };
+
+  function now() {
+    if (typeof performance !== 'undefined' && performance.now) return performance.now();
+    return Date.now();
+  }
+
+  ZPV.Engine = Engine;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* Web Worker のグルーコード。ビルド時に src/core/* の後ろに連結される。
+ * SPEC.md §4.1: 実行場所の差し替え点はここ 1 か所に閉じ込める。
+ */
+(function () {
+  'use strict';
+  var engine = new self.ZPV.Engine();
+
+  function payloadOf(r) {
+    // idealProfile はエンジン内でキャッシュしているので転送せずコピーを渡す
+    return {
+      N: r.N,
+      q: r.q,
+      pupilDiameterPx: r.pupilDiameterPx,
+      maskCount: r.maskCount,
+      wavefront: r.wavefront,
+      wavefrontMin: r.wavefrontMin,
+      wavefrontMax: r.wavefrontMax,
+      amplitude: r.amplitude,
+      mask: r.mask,
+      psf: r.psf,
+      psfPeak: r.psfPeak,
+      psfPeakRow: r.psfPeakRow,
+      psfPeakCol: r.psfPeakCol,
+      profile: { radiusLD: r.profile.radiusLD, value: r.profile.value },
+      idealProfile: r.idealProfile
+        ? {
+            radiusLD: Float64Array.from(r.idealProfile.radiusLD),
+            value: Float64Array.from(r.idealProfile.value)
+          }
+        : null,
+      metrics: r.metrics,
+      timings: r.timings,
+      cache: r.cache
+    };
+  }
+
+  self.onmessage = function (e) {
+    var msg = e.data;
+    if (!msg) return;
+    if (msg.type === 'ping') {
+      // 起動確認。file:// では Worker が沈黙するため、応答の有無で判定する
+      self.postMessage({ type: 'pong' });
+      return;
+    }
+    if (msg.type !== 'compute') return;
+    try {
+      var r = engine.compute(msg.state);
+      var p = payloadOf(r);
+      self.postMessage({ type: 'result', id: msg.id, result: p }, [
+        p.wavefront.buffer,
+        p.amplitude.buffer,
+        p.mask.buffer,
+        p.psf.buffer,
+        p.profile.radiusLD.buffer,
+        p.profile.value.buffer,
+        p.idealProfile.radiusLD.buffer,
+        p.idealProfile.value.buffer
+      ]);
+    } catch (err) {
+      self.postMessage({
+        type: 'error',
+        id: msg.id,
+        message: String((err && err.message) || err),
+        stack: String((err && err.stack) || '')
+      });
+    }
+  };
+})();
+
+</script>
+<script>
+/* Noll インデックスと (n, m) の相互変換、および他方式への変換。
+ * SPEC.md §5.3 / 規約 R-1。参照実装 torchmfbd/zern.py の zernIndex に準拠する。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var N_MAX = 20;
+  var J_MAX = ((N_MAX + 1) * (N_MAX + 2)) / 2; // 231
+
+  /* zern.py: zernIndex(j) の転記。j は 1 始まり。 */
+  function nollToNM(j) {
+    var n = Math.floor((-1 + Math.sqrt(8 * (j - 1) + 1)) / 2);
+    var p = j - (n * (n + 1)) / 2;
+    var k = n % 2;
+    var m = Math.floor((p + k) / 2) * 2 - k;
+    if (m !== 0) m *= j % 2 === 0 ? 1 : -1;
+    return { n: n, m: m };
+  }
+
+  /* j -> (n,m) を一度だけ展開し、逆引き表も作る。231 件しかないため十分。 */
+  var TABLE = [];
+  var REVERSE = new Map();
+  for (var j = 1; j <= J_MAX; j++) {
+    var nm = nollToNM(j);
+    TABLE.push(nm);
+    REVERSE.set(nm.n + ':' + nm.m, j);
+  }
+
+  function nmToNoll(n, m) {
+    var j = REVERSE.get(n + ':' + m);
+    if (j === undefined) throw new RangeError('対応する Noll 番号がありません: n=' + n + ', m=' + m);
+    return j;
+  }
+
+  /* OSA / ANSI: j = (n(n+2) + m) / 2 、0 始まり */
+  function nmToOsa(n, m) {
+    return (n * (n + 2) + m) / 2;
+  }
+
+  /* Fringe: j = (1 + (n+|m|)/2)^2 - 2|m| + floor((1 - sgn m)/2) 、1 始まり */
+  function nmToFringe(n, m) {
+    var am = Math.abs(m);
+    var sgn = m > 0 ? 1 : m < 0 ? -1 : 0;
+    return Math.pow(1 + (n + am) / 2, 2) - 2 * am + Math.floor((1 - sgn) / 2);
+  }
+
+  var ORDER_PREFIX = ['', '二次', '三次', '四次', '五次', '六次', '七次', '八次', '九次', '十次', '十一次'];
+  var FOIL = {
+    3: 'トレフォイル',
+    4: 'クアドラフォイル',
+    5: 'ペンタフォイル',
+    6: 'ヘキサフォイル'
+  };
+
+  function orderPrefix(k) {
+    return k < ORDER_PREFIX.length ? ORDER_PREFIX[k] : k + 1 + '次';
+  }
+
+  /* 表示用の日本語名称。(n, m) が正であり、名称は表示用ラベルにすぎない。 */
+  function modeName(n, m) {
+    var am = Math.abs(m);
+    var k = (n - am) / 2; // 同じ |m| の中での次数
+    var base;
+    if (am === 0) {
+      if (n === 0) return 'ピストン';
+      if (n === 2) return 'デフォーカス';
+      base = orderPrefix(k - 2) + '球面収差';
+      return base;
+    }
+    if (am === 1) {
+      base = k === 0 ? 'チルト' : orderPrefix(k - 1) + 'コマ収差';
+    } else if (am === 2) {
+      base = orderPrefix(k) + '非点収差';
+    } else {
+      base = orderPrefix(k) + (FOIL[am] || am + '葉収差');
+    }
+    var suffix;
+    if (am === 2) suffix = m > 0 ? ' (0/90°)' : ' (±45°)';
+    else suffix = m > 0 ? ' (X)' : ' (Y)';
+    return base + suffix;
+  }
+
+  /* radial order n に属する Noll 番号の範囲 [first, last] */
+  function nollRangeForOrder(n) {
+    return [(n * (n + 1)) / 2 + 1, ((n + 1) * (n + 2)) / 2];
+  }
+
+  ZPV.noll = {
+    N_MAX: N_MAX,
+    J_MAX: J_MAX,
+    nollToNM: nollToNM,
+    nmToNoll: nmToNoll,
+    nmToOsa: nmToOsa,
+    nmToFringe: nmToFringe,
+    modeName: modeName,
+    nollRangeForOrder: nollRangeForOrder,
+    table: TABLE
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* Zernike 多項式。SPEC.md §5.2 / §5.10、規約 R-2 / R-3。
+ *
+ * 動径多項式の係数は BigInt で厳密に計算する。n = 20 では定義式に
+ * 20! = 2.43e18 が現れ、倍精度の整数厳密範囲 2^53 を超えるため。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var FACT = [1n];
+  function factorial(k) {
+    for (var i = FACT.length; i <= k; i++) FACT[i] = FACT[i - 1] * BigInt(i);
+    return FACT[k];
+  }
+
+  /* R_n^|m|(rho) を rho^|m| * P(rho^2) の形に分解したときの P の係数。
+   * 返り値 coeffs[t] は rho^(|m| + 2t) の係数（t 昇順）。すべて整数。 */
+  var radialCache = new Map();
+  function radialCoefficients(n, m) {
+    var am = Math.abs(m);
+    if (am > n || (n - am) % 2 !== 0) return null; // R は恒等的に 0
+    var key = n + ':' + am;
+    var hit = radialCache.get(key);
+    if (hit) return hit;
+
+    var half = (n - am) / 2;
+    var coeffs = new Float64Array(half + 1);
+    for (var s = 0; s <= half; s++) {
+      var num = factorial(n - s);
+      var den = factorial(s) * factorial((n + am) / 2 - s) * factorial(half - s);
+      if (num % den !== 0n) {
+        throw new Error('Zernike 動径係数が整数になりません: n=' + n + ', m=' + m + ', s=' + s);
+      }
+      var c = Number(num / den);
+      // rho^(n-2s) = rho^(|m| + 2t) なので t = half - s
+      coeffs[half - s] = s % 2 === 0 ? c : -c;
+    }
+    radialCache.set(key, coeffs);
+    return coeffs;
+  }
+
+  /* 正規化係数（規約 R-2）。n = m = 0 のピストンは 1。 */
+  function normFactor(n, m) {
+    if (m === 0) return n === 0 ? 1 : Math.sqrt(n + 1);
+    return Math.sqrt(2) * Math.sqrt(n + 1);
+  }
+
+  /* R_n^|m|(rho) を Horner 法で評価する。 */
+  function radial(n, m, rho) {
+    var coeffs = radialCoefficients(n, m);
+    if (!coeffs) return 0;
+    var r2 = rho * rho;
+    var acc = coeffs[coeffs.length - 1];
+    for (var t = coeffs.length - 2; t >= 0; t--) acc = acc * r2 + coeffs[t];
+    var am = Math.abs(m);
+    return am === 0 ? acc : acc * Math.pow(rho, am);
+  }
+
+  /* 正規化済み Zernike Z_j(rho, theta)（規約 R-2 / R-3）。 */
+  function zernike(n, m, rho, theta) {
+    if (n === 0 && m === 0) return 1;
+    var r = radial(n, m, rho) * normFactor(n, m);
+    if (m === 0) return r;
+    return m > 0 ? r * Math.cos(m * theta) : r * Math.sin(-m * theta);
+  }
+
+  /* グリッドのマスク内サンプルに対して 1 モードを評価する。
+   * 既定はメモリ節約のため Float32Array（SPEC.md AR-1）。
+   * useFloat64 = true で倍精度の配列を返す（参照 fixture との突き合わせ用）。 */
+  function zernikeMapPacked(n, m, grid, useFloat64) {
+    var count = grid.count;
+    var out = useFloat64 ? new Float64Array(count) : new Float32Array(count);
+    var rho = grid.rho;
+    var theta = grid.theta;
+    if (n === 0 && m === 0) {
+      out.fill(1);
+      return out;
+    }
+    var coeffs = radialCoefficients(n, m);
+    if (!coeffs) return out; // 恒等的に 0
+    var nf = normFactor(n, m);
+    var am = Math.abs(m);
+    var last = coeffs.length - 1;
+    for (var i = 0; i < count; i++) {
+      var p = rho[i];
+      var r2 = p * p;
+      var acc = coeffs[last];
+      for (var t = last - 1; t >= 0; t--) acc = acc * r2 + coeffs[t];
+      if (am !== 0) acc *= Math.pow(p, am);
+      acc *= nf;
+      if (m > 0) acc *= Math.cos(m * theta[i]);
+      else if (m < 0) acc *= Math.sin(am * theta[i]);
+      out[i] = acc;
+    }
+    return out;
+  }
+
+  ZPV.zernike = {
+    radialCoefficients: radialCoefficients,
+    normFactor: normFactor,
+    radial: radial,
+    zernike: zernike,
+    zernikeMapPacked: zernikeMapPacked
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 瞳グリッドと瞳マスク。SPEC.md §5.4 / §5.6、規約 R-4。
+ *
+ * グリッドは参照実装と同じ「端点を含む」格子:
+ *     x[i] = -1 + 2i/(N-1),  rho = q * sqrt(x^2 + y^2),  theta = atan2(y, x)
+ * したがって瞳直径は (N-1)/q 画素になる（画素中心格子ではない）。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var DEFAULT_PUPIL = {
+    shape: 'circular', // 'circular' | 'rectangular'
+    obscurationRatio: 0,
+    spider: { count: 0, widthPixels: 2, rotationDeg: 0 },
+    apodization: { type: 'none', width: 1 }, // 'none' | 'gaussian'
+    rect: { halfWidth: 1, halfHeight: 1 }
+  };
+
+  function merge(base, over) {
+    var out = {};
+    var k;
+    for (k in base) out[k] = base[k];
+    if (over) {
+      for (k in over) {
+        if (over[k] && typeof over[k] === 'object' && !Array.isArray(over[k])) {
+          out[k] = merge(base[k] || {}, over[k]);
+        } else if (over[k] !== undefined) {
+          out[k] = over[k];
+        }
+      }
+    }
+    return out;
+  }
+
+  /* 入力の検証。異常値で黙って空の結果を返さないようにする（SPEC.md IT-05）。
+   * 2 のべき乗が要るのは FFT だけなので、格子生成では要求しない
+   * （直交性の検証には q=1, N=513 のような格子を使う）。 */
+  function validate(N, q, requirePowerOfTwo) {
+    if (typeof N !== 'number' || !isFinite(N) || N !== Math.floor(N) || N < 8 || N > 8192) {
+      throw new RangeError('配列サイズ N は 8〜8192 の整数である必要があります: ' + N);
+    }
+    if (requirePowerOfTwo && (N & (N - 1)) !== 0) {
+      throw new RangeError('FFT を使うため配列サイズ N は 2 のべき乗である必要があります: ' + N);
+    }
+    if (typeof q !== 'number' || !isFinite(q) || q <= 0) {
+      throw new RangeError('サンプリング q は正の有限値である必要があります: ' + q);
+    }
+  }
+
+  /* N x N の格子を作り、マスク内サンプルだけをパックして返す。 */
+  function buildGrid(N, q, pupilOpts) {
+    validate(N, q, false);
+    var opt = merge(DEFAULT_PUPIL, pupilOpts);
+    var step = 2 / (N - 1);
+    var xs = new Float64Array(N);
+    for (var i = 0; i < N; i++) xs[i] = -1 + step * i;
+
+    var eps = opt.obscurationRatio || 0;
+    var spider = opt.spider || DEFAULT_PUPIL.spider;
+    var spiderHalf = spider.count > 0 ? (spider.widthPixels * step) / 2 : 0;
+    var spiderRot = ((spider.rotationDeg || 0) * Math.PI) / 180;
+    var apod = opt.apodization || DEFAULT_PUPIL.apodization;
+    var rect = opt.rect || DEFAULT_PUPIL.rect;
+
+    // 1 パス目: マスク内画素数と行範囲を数える
+    var idx = [];
+    var rowMin = N;
+    var rowMax = -1;
+    var row, col, x, y, r, rr, inside, a, k, ang, dist;
+
+    for (row = 0; row < N; row++) {
+      y = xs[row];
+      for (col = 0; col < N; col++) {
+        x = xs[col];
+        rr = Math.sqrt(x * x + y * y);
+        r = q * rr;
+        if (opt.shape === 'rectangular') {
+          inside = q * Math.abs(x) <= rect.halfWidth && q * Math.abs(y) <= rect.halfHeight;
+        } else {
+          inside = r <= 1 && r >= eps;
+        }
+        if (inside && spider.count > 0 && spiderHalf > 0) {
+          // count は「腕の本数」。各腕は中心から外向きの半直線なので、
+          // 直線ではなく半直線（射影が正の側）だけを遮蔽する。
+          for (k = 0; k < spider.count; k++) {
+            ang = spiderRot + (2 * Math.PI * k) / spider.count;
+            var dxk = Math.cos(ang);
+            var dyk = Math.sin(ang);
+            if (x * dxk + y * dyk < 0) continue; // 反対側は別の腕が担当する
+            dist = Math.abs(x * dyk - y * dxk);
+            if (dist <= spiderHalf) {
+              inside = false;
+              break;
+            }
+          }
+        }
+        if (inside) {
+          idx.push(row * N + col);
+          if (row < rowMin) rowMin = row;
+          if (row > rowMax) rowMax = row;
+        }
+      }
+    }
+
+    var count = idx.length;
+    var grid = {
+      N: N,
+      q: q,
+      pupilDiameterPx: (N - 1) / q,
+      count: count,
+      index: Int32Array.from(idx),
+      rho: new Float64Array(count),
+      theta: new Float64Array(count),
+      amp: new Float64Array(count),
+      rowMin: rowMin < 0 ? 0 : rowMin,
+      rowMax: rowMax < 0 ? -1 : rowMax,
+      options: opt,
+      ampSum: 0,
+      ampSqSum: 0
+    };
+
+    for (var t = 0; t < count; t++) {
+      var lin = grid.index[t];
+      row = (lin / N) | 0;
+      col = lin - row * N;
+      y = xs[row];
+      x = xs[col];
+      r = q * Math.sqrt(x * x + y * y);
+      grid.rho[t] = r;
+      grid.theta[t] = Math.atan2(y, x);
+      a = 1;
+      if (apod.type === 'gaussian') a = Math.exp(-Math.pow(r / (apod.width || 1), 2));
+      grid.amp[t] = a;
+      grid.ampSum += a;
+      grid.ampSqSum += a * a;
+    }
+    return grid;
+  }
+
+  /* グリッドの同一性判定に使うキー。変わったら基底キャッシュを捨てる。 */
+  function gridKey(N, q, pupilOpts) {
+    return JSON.stringify([N, q, merge(DEFAULT_PUPIL, pupilOpts)]);
+  }
+
+  ZPV.pupil = {
+    DEFAULT_PUPIL: DEFAULT_PUPIL,
+    validate: validate,
+    buildGrid: buildGrid,
+    gridKey: gridKey,
+    merge: merge
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* radix-2 Cooley-Tukey による複素 FFT。SPEC.md §5.10。
+ *
+ * 2 次元版は行→列の 2 パス。瞳の外側の行は全要素 0 なので、行パスは
+ * [rowMin, rowMax] の範囲だけ計算すればよい（SPEC.md §3.5 の最適化 1）。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var twiddleCache = new Map();
+
+  function twiddles(n) {
+    var hit = twiddleCache.get(n);
+    if (hit) return hit;
+    // 各段 length = 2,4,...,n の w = exp(-2*pi*i/length) の冪乗を平坦に格納
+    var cos = new Float64Array(n);
+    var sin = new Float64Array(n);
+    for (var i = 0; i < n; i++) {
+      var ang = (-2 * Math.PI * i) / n;
+      cos[i] = Math.cos(ang);
+      sin[i] = Math.sin(ang);
+    }
+    var rev = new Int32Array(n);
+    var bits = Math.log2(n) | 0;
+    for (var j = 0; j < n; j++) {
+      var r = 0;
+      for (var b = 0; b < bits; b++) if (j & (1 << b)) r |= 1 << (bits - 1 - b);
+      rev[j] = r;
+    }
+    var t = { cos: cos, sin: sin, rev: rev, n: n };
+    twiddleCache.set(n, t);
+    return t;
+  }
+
+  /* re/im の [offset, offset + n*stride) を in-place で 1 次元 FFT する。 */
+  function fft1d(re, im, n, offset, stride, tw) {
+    var rev = tw.rev;
+    var i, j, a, b, len, half, step, k, ar, ai, br, bi, wr, wi, tr, ti;
+
+    for (i = 0; i < n; i++) {
+      j = rev[i];
+      if (i < j) {
+        a = offset + i * stride;
+        b = offset + j * stride;
+        tr = re[a]; re[a] = re[b]; re[b] = tr;
+        ti = im[a]; im[a] = im[b]; im[b] = ti;
+      }
+    }
+
+    for (len = 2; len <= n; len <<= 1) {
+      half = len >> 1;
+      step = n / len;
+      for (i = 0; i < n; i += len) {
+        for (k = 0; k < half; k++) {
+          wr = tw.cos[k * step];
+          wi = tw.sin[k * step];
+          a = offset + (i + k) * stride;
+          b = offset + (i + k + half) * stride;
+          br = re[b]; bi = im[b];
+          tr = br * wr - bi * wi;
+          ti = br * wi + bi * wr;
+          ar = re[a]; ai = im[a];
+          re[b] = ar - tr; im[b] = ai - ti;
+          re[a] = ar + tr; im[a] = ai + ti;
+        }
+      }
+    }
+  }
+
+  var BLOCK = 32;
+
+  /* 正方行列の in-place 転置（キャッシュのためブロック単位で行う）。 */
+  function transpose(a, N) {
+    for (var i0 = 0; i0 < N; i0 += BLOCK) {
+      for (var j0 = i0; j0 < N; j0 += BLOCK) {
+        var iMax = Math.min(i0 + BLOCK, N);
+        var jMax = Math.min(j0 + BLOCK, N);
+        for (var i = i0; i < iMax; i++) {
+          for (var j = j0 === i0 ? i + 1 : j0; j < jMax; j++) {
+            var p = i * N + j;
+            var q = j * N + i;
+            var t = a[p];
+            a[p] = a[q];
+            a[q] = t;
+          }
+        }
+      }
+    }
+  }
+
+  /* N x N の複素配列（row-major）を in-place で 2 次元 FFT する。
+   *
+   * 列パスは stride N のアクセスになりキャッシュミスで極端に遅くなるため、
+   * ブロック転置してから行パスを掛け、転置で戻す。N=1024 で列パスが
+   * 134 ms -> 29 ms になる（転置 2 回分を含めても 3 倍以上速い）。
+   *
+   * opts.rowMin / opts.rowMax を与えると、その範囲外の行の行パスを省略する
+   * （その行が全て 0 であることが前提）。 */
+  function fft2(re, im, N, opts) {
+    var tw = twiddles(N);
+    var rowMin = 0;
+    var rowMax = N - 1;
+    if (opts && opts.rowMin !== undefined && opts.rowMax !== undefined && opts.rowMax >= opts.rowMin) {
+      rowMin = opts.rowMin;
+      rowMax = opts.rowMax;
+    }
+    var row;
+    for (row = rowMin; row <= rowMax; row++) fft1d(re, im, N, row * N, 1, tw);
+
+    transpose(re, N);
+    transpose(im, N);
+    for (row = 0; row < N; row++) fft1d(re, im, N, row * N, 1, tw);
+    transpose(re, N);
+    transpose(im, N);
+  }
+
+  /* 素朴な DFT。テスト用の参照。 */
+  function dft1dNaive(re, im) {
+    var n = re.length;
+    var outRe = new Float64Array(n);
+    var outIm = new Float64Array(n);
+    for (var k = 0; k < n; k++) {
+      var sr = 0;
+      var si = 0;
+      for (var t = 0; t < n; t++) {
+        var ang = (-2 * Math.PI * k * t) / n;
+        var c = Math.cos(ang);
+        var s = Math.sin(ang);
+        sr += re[t] * c - im[t] * s;
+        si += re[t] * s + im[t] * c;
+      }
+      outRe[k] = sr;
+      outIm[k] = si;
+    }
+    return { re: outRe, im: outIm };
+  }
+
+  /* 象限を入れ替えて原点を配列中央に移す（表示用）。 */
+  function fftshift(src, N, dst) {
+    var out = dst || new Float32Array(N * N);
+    var h = N >> 1;
+    for (var row = 0; row < N; row++) {
+      var sr = (row + h) % N;
+      for (var col = 0; col < N; col++) {
+        out[row * N + col] = src[sr * N + ((col + h) % N)];
+      }
+    }
+    return out;
+  }
+
+  ZPV.fft = { fft1d: fft1d, fft2: fft2, fftshift: fftshift, dft1dNaive: dft1dNaive, twiddles: twiddles, transpose: transpose };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* Zernike 基底マップの遅延生成・パック格納・LRU キャッシュ。SPEC.md §4.3。
+ *
+ * AR-1 マスク内画素のみを Float32Array にパックして保持
+ * AR-2 係数が非ゼロになった項だけ生成する（遅延生成）
+ * AR-3 LRU で上限（既定 128 MB）を守る
+ * AR-5 グリッドが変わったら全破棄
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var DEFAULT_LIMIT_BYTES = 128 * 1024 * 1024;
+
+  function BasisCache(limitBytes) {
+    this.limitBytes = limitBytes || DEFAULT_LIMIT_BYTES;
+    this.map = new Map(); // key -> Float32Array（Map は挿入順を保つので LRU に使える）
+    this.bytes = 0;
+    this.gridKey = null;
+    this.grid = null;
+    this.hits = 0;
+    this.misses = 0;
+  }
+
+  BasisCache.prototype.setGrid = function (grid, gridKey) {
+    if (this.gridKey !== gridKey) {
+      this.map.clear();
+      this.bytes = 0;
+      this.gridKey = gridKey;
+    }
+    this.grid = grid;
+  };
+
+  BasisCache.prototype.get = function (n, m) {
+    if (!this.grid) throw new Error('グリッドが未設定です');
+    var key = n + ':' + m;
+    var hit = this.map.get(key);
+    if (hit) {
+      this.hits++;
+      this.map.delete(key); // 末尾に移動して最近使用扱いにする
+      this.map.set(key, hit);
+      return hit;
+    }
+    this.misses++;
+    var mapData = ZPV.zernike.zernikeMapPacked(n, m, this.grid);
+    this.map.set(key, mapData);
+    this.bytes += mapData.byteLength;
+    this.evict();
+    return mapData;
+  };
+
+  BasisCache.prototype.evict = function () {
+    while (this.bytes > this.limitBytes && this.map.size > 1) {
+      var oldest = this.map.keys().next().value;
+      var v = this.map.get(oldest);
+      this.map.delete(oldest);
+      this.bytes -= v.byteLength;
+    }
+  };
+
+  BasisCache.prototype.stats = function () {
+    return { entries: this.map.size, bytes: this.bytes, hits: this.hits, misses: this.misses };
+  };
+
+  ZPV.BasisCache = BasisCache;
+  ZPV.DEFAULT_BASIS_LIMIT_BYTES = DEFAULT_LIMIT_BYTES;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 波面 → 瞳関数 → PSF。SPEC.md §5.5 / §5.6 / §5.7、規約 R-5 / R-6。
+ *
+ *   W  = Σ a_j Z_j            [rad]
+ *   P  = A · exp(i·W)
+ *   PSF = |FFT2(P)|^2 を総和で正規化
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  /* coeffs: { nollJ: value[rad] } または Map。非ゼロ項だけを走査する（AR-4）。 */
+  function nonZeroModes(coeffs, excludePistonTilt) {
+    var out = [];
+    var arr = [];
+    if (coeffs instanceof Map) {
+      coeffs.forEach(function (v, k) { arr.push([Number(k), v]); });
+    } else {
+      Object.keys(coeffs).forEach(function (k) { arr.push([Number(k), coeffs[k]]); });
+    }
+    for (var i = 0; i < arr.length; i++) {
+      var j = arr[i][0];
+      var v = arr[i][1];
+      if (!v) continue;
+      if (excludePistonTilt && j <= 3) continue;
+      var nm = ZPV.noll.nollToNM(j);
+      out.push({ j: j, n: nm.n, m: nm.m, value: v });
+    }
+    out.sort(function (a, b) { return a.j - b.j; });
+    return out;
+  }
+
+  /* マスク内サンプルの波面 [rad] */
+  function computeWavefront(grid, cache, coeffs, excludePistonTilt) {
+    var modes = nonZeroModes(coeffs, excludePistonTilt);
+    var wf = new Float64Array(grid.count);
+    for (var k = 0; k < modes.length; k++) {
+      var basis = cache.get(modes[k].n, modes[k].m);
+      var c = modes[k].value;
+      for (var i = 0; i < grid.count; i++) wf[i] += c * basis[i];
+    }
+    return wf;
+  }
+
+  /* 瞳関数を N x N の複素配列に展開して FFT し、|.|^2 を返す（fftshift 前）。 */
+  function computeIntensity(grid, wf, scratch) {
+    var N = grid.N;
+    var size = N * N;
+    var re = scratch && scratch.re && scratch.re.length === size ? scratch.re : new Float64Array(size);
+    var im = scratch && scratch.im && scratch.im.length === size ? scratch.im : new Float64Array(size);
+    re.fill(0);
+    im.fill(0);
+
+    var idx = grid.index;
+    var amp = grid.amp;
+    for (var i = 0; i < grid.count; i++) {
+      var p = idx[i];
+      var a = amp[i];
+      var w = wf ? wf[i] : 0;
+      re[p] = a * Math.cos(w);
+      im[p] = a * Math.sin(w);
+    }
+
+    ZPV.fft.fft2(re, im, N, { rowMin: grid.rowMin, rowMax: grid.rowMax });
+
+    var out = new Float64Array(size);
+    var sum = 0;
+    for (var t = 0; t < size; t++) {
+      var v = re[t] * re[t] + im[t] * im[t];
+      out[t] = v;
+      sum += v;
+    }
+    return { intensity: out, sum: sum, scratch: { re: re, im: im } };
+  }
+
+  /* 総和 1 に正規化し、fftshift した PSF（Float32Array）を返す。 */
+  function computePsf(grid, wf, scratch) {
+    var r = computeIntensity(grid, wf, scratch);
+    var N = grid.N;
+    var size = N * N;
+    var norm = r.sum > 0 ? 1 / r.sum : 0;
+    var shifted = new Float32Array(size);
+    var h = N >> 1;
+    var peak = 0;
+    var peakIndex = 0;
+    for (var row = 0; row < N; row++) {
+      var sr = (row + h) % N;
+      for (var col = 0; col < N; col++) {
+        var v = r.intensity[sr * N + ((col + h) % N)] * norm;
+        var d = row * N + col;
+        shifted[d] = v;
+        if (v > peak) { peak = v; peakIndex = d; }
+      }
+    }
+    return {
+      psf: shifted,
+      peak: peak,
+      peakRow: (peakIndex / N) | 0,
+      peakCol: peakIndex % N,
+      rawSum: r.sum,
+      scratch: r.scratch
+    };
+  }
+
+  /* マスク内の波面を N x N の表示用 Float32Array に展開する。 */
+  function expandToFull(grid, packed, fillValue) {
+    var out = new Float32Array(grid.N * grid.N);
+    if (fillValue) out.fill(fillValue);
+    for (var i = 0; i < grid.count; i++) out[grid.index[i]] = packed[i];
+    return out;
+  }
+
+  function maskFull(grid) {
+    var out = new Uint8Array(grid.N * grid.N);
+    for (var i = 0; i < grid.count; i++) out[grid.index[i]] = 1;
+    return out;
+  }
+
+  ZPV.psf = {
+    nonZeroModes: nonZeroModes,
+    computeWavefront: computeWavefront,
+    computeIntensity: computeIntensity,
+    computePsf: computePsf,
+    expandToFull: expandToFull,
+    maskFull: maskFull
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 評価指標。SPEC.md §5.8。位相の単位は rad。 */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  /* マスク内の PV と、振幅二乗で重み付けした RMS。 */
+  function wavefrontStats(grid, wf) {
+    var n = grid.count;
+    if (n === 0) return { pv: 0, rms: 0, mean: 0 };
+    var wsum = 0;
+    var wwsum = 0;
+    var min = Infinity;
+    var max = -Infinity;
+    var i, a2, v;
+    for (i = 0; i < n; i++) {
+      v = wf[i];
+      a2 = grid.amp[i] * grid.amp[i];
+      wsum += a2 * v;
+      wwsum += a2;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    var mean = wwsum > 0 ? wsum / wwsum : 0;
+    var acc = 0;
+    for (i = 0; i < n; i++) {
+      a2 = grid.amp[i] * grid.amp[i];
+      v = wf[i] - mean;
+      acc += a2 * v * v;
+    }
+    return { pv: max - min, rms: wwsum > 0 ? Math.sqrt(acc / wwsum) : 0, mean: mean };
+  }
+
+  /* 定義値の Strehl 比: |Σ A e^{iW}|^2 / (Σ A)^2 */
+  function strehlDefinition(grid, wf) {
+    var sr = 0;
+    var si = 0;
+    var sa = 0;
+    for (var i = 0; i < grid.count; i++) {
+      var a = grid.amp[i];
+      var w = wf ? wf[i] : 0;
+      sr += a * Math.cos(w);
+      si += a * Math.sin(w);
+      sa += a;
+    }
+    if (sa <= 0) return 0;
+    return (sr * sr + si * si) / (sa * sa);
+  }
+
+  /* Maréchal 近似（rad 単位の RMS を使う） */
+  function marechal(rmsRad) {
+    return Math.exp(-rmsRad * rmsRad);
+  }
+
+  /* PSF の放射平均プロファイル。半径の単位は λ/D。 */
+  function radialProfile(psf, N, q, centerRow, centerCol, maxRadiusPx) {
+    var maxR = Math.min(maxRadiusPx || N / 2, N / 2);
+    var nbin = Math.ceil(maxR);
+    var sum = new Float64Array(nbin + 1);
+    var cnt = new Float64Array(nbin + 1);
+    for (var row = 0; row < N; row++) {
+      var dy = row - centerRow;
+      for (var col = 0; col < N; col++) {
+        var dx = col - centerCol;
+        var r = Math.sqrt(dx * dx + dy * dy);
+        if (r > maxR) continue;
+        var b = Math.round(r);
+        sum[b] += psf[row * N + col];
+        cnt[b] += 1;
+      }
+    }
+    var radiusLD = new Float64Array(nbin + 1);
+    var value = new Float64Array(nbin + 1);
+    for (var b2 = 0; b2 <= nbin; b2++) {
+      radiusLD[b2] = b2 / q;
+      value[b2] = cnt[b2] > 0 ? sum[b2] / cnt[b2] : 0;
+    }
+    return { radiusLD: radiusLD, value: value };
+  }
+
+  /* 半値全幅 [λ/D]。放射平均プロファイルを線形補間して求める。 */
+  function fwhm(profile) {
+    var v = profile.value;
+    var r = profile.radiusLD;
+    if (v.length === 0 || v[0] <= 0) return NaN;
+    var half = v[0] / 2;
+    for (var i = 1; i < v.length; i++) {
+      if (v[i] <= half) {
+        var t = (v[i - 1] - half) / (v[i - 1] - v[i]);
+        return 2 * (r[i - 1] + t * (r[i] - r[i - 1]));
+      }
+    }
+    return NaN;
+  }
+
+  /* 半径 radiusLD [λ/D] 内のエネルギー比。psf は総和 1 に正規化済みであること。 */
+  function encircledEnergy(psf, N, q, centerRow, centerCol, radiusLD) {
+    var rpx = radiusLD * q;
+    var r2 = rpx * rpx;
+    var acc = 0;
+    var lo = Math.max(0, Math.floor(centerRow - rpx));
+    var hi = Math.min(N - 1, Math.ceil(centerRow + rpx));
+    for (var row = lo; row <= hi; row++) {
+      var dy = row - centerRow;
+      var span = Math.sqrt(Math.max(0, r2 - dy * dy));
+      var c0 = Math.max(0, Math.floor(centerCol - span));
+      var c1 = Math.min(N - 1, Math.ceil(centerCol + span));
+      for (var col = c0; col <= c1; col++) {
+        var dx = col - centerCol;
+        if (dx * dx + dy * dy <= r2) acc += psf[row * N + col];
+      }
+    }
+    return acc;
+  }
+
+  /* 理想 Airy 分布（強度、ピーク 1）。v = pi * r[λ/D] */
+  function airy(rLD) {
+    if (rLD === 0) return 1;
+    var v = Math.PI * rLD;
+    return Math.pow((2 * besselJ1(v)) / v, 2);
+  }
+
+  /* 1 次ベッセル関数（Abramowitz & Stegun 9.4.4 / 9.4.6 の多項式近似） */
+  function besselJ1(x) {
+    var ax = Math.abs(x);
+    var y, ans1, ans2, ans;
+    if (ax < 8) {
+      y = x * x;
+      ans1 = x * (72362614232.0 + y * (-7895059235.0 + y * (242396853.1 + y * (-2972611.439 + y * (15704.48260 + y * -30.16036606)))));
+      ans2 = 144725228442.0 + y * (2300535178.0 + y * (18583304.74 + y * (99447.43394 + y * (376.9991397 + y))));
+      ans = ans1 / ans2;
+    } else {
+      var z = 8 / ax;
+      y = z * z;
+      var xx = ax - 2.356194491;
+      ans1 = 1.0 + y * (0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * -0.240337019e-6)));
+      ans2 = 0.04687499995 + y * (-0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+      ans = Math.sqrt(0.636619772 / ax) * (Math.cos(xx) * ans1 - z * Math.sin(xx) * ans2);
+      if (x < 0) ans = -ans;
+    }
+    return ans;
+  }
+
+  ZPV.metrics = {
+    wavefrontStats: wavefrontStats,
+    strehlDefinition: strehlDefinition,
+    marechal: marechal,
+    radialProfile: radialProfile,
+    fwhm: fwhm,
+    encircledEnergy: encircledEnergy,
+    airy: airy,
+    besselJ1: besselJ1
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 計算パイプラインのオーケストレーション。SPEC.md §4.2。
+ *
+ * 状態（グリッド設定 + 係数）を受け取り、表示に必要な一式を返す。
+ * DOM を参照しないので Web Worker からも Node のテストからも使える。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  function Engine(options) {
+    options = options || {};
+    this.cache = new ZPV.BasisCache(options.basisLimitBytes);
+    this.grid = null;
+    this.gridKey = null;
+    this.scratch = null;
+    this.idealPeak = 0;
+    this.idealProfile = null;
+  }
+
+  Engine.prototype.ensureGrid = function (N, q, pupilOpts) {
+    ZPV.pupil.validate(N, q, true); // FFT を使うので 2 のべき乗が必要
+    var key = ZPV.pupil.gridKey(N, q, pupilOpts);
+    if (this.gridKey === key && this.grid) return this.grid;
+    this.grid = ZPV.pupil.buildGrid(N, q, pupilOpts);
+    this.gridKey = key;
+    this.cache.setGrid(this.grid, key);
+    this.scratch = null;
+
+    // 同一瞳マスクの無収差 PSF（Strehl の分母と理想プロファイル）
+    var ideal = ZPV.psf.computePsf(this.grid, null, this.scratch);
+    this.scratch = ideal.scratch;
+    this.idealPeak = ideal.peak;
+    this.idealProfile = ZPV.metrics.radialProfile(
+      ideal.psf, N, q, ideal.peakRow, ideal.peakCol, Math.min(N / 2, 32 * q)
+    );
+    return this.grid;
+  };
+
+  /* state: { N, q, pupil, coeffs:{nollJ:value[rad]}, excludePistonTilt, eeRadiusLD } */
+  Engine.prototype.compute = function (state) {
+    var t0 = now();
+    var N = state.N;
+    var q = state.q;
+    var grid = this.ensureGrid(N, q, state.pupil);
+    var tGrid = now();
+
+    // 波面を 2 本同時に作る: 表示用（全項）と指標用（ピストン/チルト除外の可否）
+    var modes = ZPV.psf.nonZeroModes(state.coeffs || {}, false);
+    var wfFull = new Float64Array(grid.count);
+    var exclude = state.excludePistonTilt !== false;
+    var wfMetric = exclude ? new Float64Array(grid.count) : wfFull;
+    for (var k = 0; k < modes.length; k++) {
+      var basis = this.cache.get(modes[k].n, modes[k].m);
+      var c = modes[k].value;
+      var toMetric = exclude && modes[k].j > 3;
+      for (var i = 0; i < grid.count; i++) {
+        var v = c * basis[i];
+        wfFull[i] += v;
+        if (toMetric) wfMetric[i] += v;
+      }
+    }
+    var tWave = now();
+
+    var res = ZPV.psf.computePsf(grid, wfFull, this.scratch);
+    this.scratch = res.scratch;
+    var tFft = now();
+
+    var stats = ZPV.metrics.wavefrontStats(grid, wfMetric);
+    var strehlDef = ZPV.metrics.strehlDefinition(grid, wfMetric);
+    var strehlPeak = this.idealPeak > 0 ? res.peak / this.idealPeak : 0;
+    var profile = ZPV.metrics.radialProfile(
+      res.psf, N, q, res.peakRow, res.peakCol, Math.min(N / 2, 32 * q)
+    );
+    var eeRadius = state.eeRadiusLD || 3;
+    var ee = ZPV.metrics.encircledEnergy(res.psf, N, q, res.peakRow, res.peakCol, eeRadius);
+
+    var wfDisplay = ZPV.psf.expandToFull(grid, wfFull, 0);
+    var wfMin = Infinity;
+    var wfMax = -Infinity;
+    for (var t = 0; t < grid.count; t++) {
+      var w = wfFull[t];
+      if (w < wfMin) wfMin = w;
+      if (w > wfMax) wfMax = w;
+    }
+    if (grid.count === 0) { wfMin = 0; wfMax = 0; }
+    var ampDisplay = ZPV.psf.expandToFull(grid, grid.amp, 0);
+    var tEnd = now();
+
+    return {
+      N: N,
+      q: q,
+      pupilDiameterPx: grid.pupilDiameterPx,
+      maskCount: grid.count,
+      wavefront: wfDisplay,
+      wavefrontMin: wfMin,
+      wavefrontMax: wfMax,
+      amplitude: ampDisplay,
+      mask: ZPV.psf.maskFull(grid),
+      psf: res.psf,
+      psfPeak: res.peak,
+      psfPeakRow: res.peakRow,
+      psfPeakCol: res.peakCol,
+      profile: { radiusLD: profile.radiusLD, value: profile.value },
+      idealProfile: this.idealProfile
+        ? { radiusLD: this.idealProfile.radiusLD, value: this.idealProfile.value }
+        : null,
+      idealPeak: this.idealPeak,
+      metrics: {
+        pv: stats.pv,
+        rms: stats.rms,
+        strehlDefinition: strehlDef,
+        strehlPeak: strehlPeak,
+        marechal: ZPV.metrics.marechal(stats.rms),
+        fwhm: ZPV.metrics.fwhm(profile),
+        ee: ee,
+        eeRadiusLD: eeRadius,
+        modeCount: modes.length,
+        excludePistonTilt: exclude
+      },
+      timings: {
+        grid: tGrid - t0,
+        wavefront: tWave - tGrid,
+        fft: tFft - tWave,
+        metrics: tEnd - tFft,
+        total: tEnd - t0
+      },
+      cache: this.cache.stats()
+    };
+  };
+
+  function now() {
+    if (typeof performance !== 'undefined' && performance.now) return performance.now();
+    return Date.now();
+  }
+
+  ZPV.Engine = Engine;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+/* カラーマップ。256 段の LUT を制御点から線形補間して作る。SPEC.md §9.3 */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var ANCHORS = {
+    viridis: [
+      [68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142], [38, 130, 142],
+      [31, 158, 137], [53, 183, 121], [109, 205, 89], [253, 231, 37]
+    ],
+    inferno: [
+      [0, 0, 4], [22, 11, 57], [66, 10, 104], [106, 23, 110], [147, 38, 103],
+      [188, 55, 84], [229, 92, 48], [248, 148, 65], [252, 255, 164]
+    ],
+    hot: [[0, 0, 0], [128, 0, 0], [255, 0, 0], [255, 128, 0], [255, 255, 0], [255, 255, 255]],
+    grayscale: [[0, 0, 0], [255, 255, 255]],
+    // 発散型: 0 を中央の白に置く（波面表示用）
+    coolwarm: [[59, 76, 192], [122, 157, 247], [221, 221, 221], [247, 145, 120], [180, 4, 38]]
+  };
+
+  var cache = {};
+
+  function lut(name) {
+    if (cache[name]) return cache[name];
+    var anchors = ANCHORS[name] || ANCHORS.viridis;
+    var out = new Uint8Array(256 * 3);
+    var segs = anchors.length - 1;
+    for (var i = 0; i < 256; i++) {
+      var t = (i / 255) * segs;
+      var k = Math.min(Math.floor(t), segs - 1);
+      var f = t - k;
+      for (var c = 0; c < 3; c++) {
+        out[i * 3 + c] = Math.round(anchors[k][c] + (anchors[k + 1][c] - anchors[k][c]) * f);
+      }
+    }
+    cache[name] = out;
+    return out;
+  }
+
+  ZPV.colormaps = {
+    names: Object.keys(ANCHORS),
+    lut: lut,
+    labels: {
+      viridis: 'viridis',
+      inferno: 'inferno',
+      hot: 'hot',
+      grayscale: 'グレースケール',
+      coolwarm: 'coolwarm (発散型)'
+    }
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 2 次元マップの表示。SPEC.md §3.6 / §9.3
+ *
+ * WebGL2 が使えれば R32F テクスチャに 1 回アップロードし、
+ * 対数/γ/レンジ/カラーマップ/ズームをすべてフラグメントシェーダで処理する
+ * （表示パラメータの変更に再計算もアップロードも不要）。
+ * 使えない場合は Canvas2D にフォールバックする。
+ */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var VS = [
+    '#version 300 es',
+    'in vec2 aPos;',
+    'out vec2 vUv;',
+    'void main() {',
+    '  vUv = aPos * 0.5 + 0.5;',
+    '  gl_Position = vec4(aPos, 0.0, 1.0);',
+    '}'
+  ].join('\n');
+
+  var FS = [
+    '#version 300 es',
+    'precision highp float;',
+    'precision highp sampler2D;',
+    'in vec2 vUv;',
+    'out vec4 fragColor;',
+    'uniform sampler2D uData;',
+    'uniform sampler2D uMask;',
+    'uniform sampler2D uCmap;',
+    'uniform vec2 uCenter;',   // テクスチャ座標 (0..1) の中心
+    'uniform float uHalf;',    // テクスチャ座標での半幅
+    'uniform int uMode;',      // 0: linear, 1: log(dB), 2: gamma
+    'uniform float uVmin;',
+    'uniform float uVmax;',
+    'uniform float uFloorDb;',
+    'uniform float uGamma;',
+    'uniform int uUseMask;',
+    'uniform vec3 uMaskColor;',
+    'void main() {',
+    '  // 行 0 を画面の上に描くためテクスチャの v 軸を反転する（SPEC.md §9.3）',
+    '  vec2 t2 = vec2(vUv.x, 1.0 - vUv.y);',
+    '  vec2 uv = uCenter + (t2 - 0.5) * (2.0 * uHalf);',
+    '  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {',
+    '    fragColor = vec4(uMaskColor, 1.0); return;',
+    '  }',
+    '  if (uUseMask == 1 && texture(uMask, uv).r < 0.5) {',
+    '    fragColor = vec4(uMaskColor, 1.0); return;',
+    '  }',
+    '  float v = texture(uData, uv).r;',
+    '  float t;',
+    '  if (uMode == 1) {',
+    '    float peak = max(uVmax, 1e-30);',
+    '    float db = 10.0 * log(max(v, 1e-30) / peak) / log(10.0);',
+    '    t = clamp((db - uFloorDb) / (0.0 - uFloorDb), 0.0, 1.0);',
+    '  } else {',
+    '    t = clamp((v - uVmin) / max(uVmax - uVmin, 1e-30), 0.0, 1.0);',
+    '    if (uMode == 2) t = pow(t, uGamma);',
+    '  }',
+    '  fragColor = vec4(texture(uCmap, vec2(t, 0.5)).rgb, 1.0);',
+    '}'
+  ].join('\n');
+
+  function compile(gl, type, src) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      throw new Error('シェーダのコンパイルに失敗: ' + gl.getShaderInfoLog(sh));
+    }
+    return sh;
+  }
+
+  function ImageView(canvas) {
+    this.canvas = canvas;
+    this.N = 0;
+    this.data = null;
+    this.mask = null;
+    this.params = {
+      mode: 'linear',
+      vmin: 0,
+      vmax: 1,
+      floorDb: -50,
+      gamma: 0.5,
+      colormap: 'viridis',
+      centerX: 0.5,
+      centerY: 0.5,
+      halfExtent: 0.5,
+      useMask: false
+    };
+    this.gl = null;
+    this.backend = 'canvas2d';
+    try {
+      this.initGL();
+    } catch (e) {
+      this.gl = null;
+      this.backend = 'canvas2d';
+      this.glError = String(e && e.message ? e.message : e);
+    }
+    if (!this.gl) this.ctx2d = canvas.getContext('2d');
+  }
+
+  ImageView.prototype.initGL = function () {
+    var gl = this.canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('WebGL2 が利用できません');
+    if (!gl.getExtension('EXT_color_buffer_float')) {
+      // R32F のテクスチャ自体はコア機能なので拡張が無くても続行する
+    }
+    var prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      throw new Error('シェーダのリンクに失敗: ' + gl.getProgramInfoLog(prog));
+    }
+    gl.useProgram(prog);
+
+    var vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    var loc = gl.getAttribLocation(prog, 'aPos');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+    this.gl = gl;
+    this.prog = prog;
+    this.u = {};
+    ['uData', 'uMask', 'uCmap', 'uCenter', 'uHalf', 'uMode', 'uVmin', 'uVmax', 'uFloorDb', 'uGamma', 'uUseMask', 'uMaskColor']
+      .forEach(function (n) { this.u[n] = gl.getUniformLocation(prog, n); }, this);
+
+    this.texData = this.makeTexture(gl);
+    this.texMask = this.makeTexture(gl);
+    this.texCmap = this.makeTexture(gl);
+    this.backend = 'webgl2';
+    this.cmapUploaded = null;
+  };
+
+  ImageView.prototype.makeTexture = function (gl) {
+    var t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  };
+
+  /* データを差し替える（計算結果が変わったときだけ呼ぶ）。 */
+  ImageView.prototype.setData = function (data, N, mask) {
+    this.data = data;
+    this.N = N;
+    this.mask = mask || null;
+    if (this.gl) {
+      var gl = this.gl;
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.texData);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, N, N, 0, gl.RED, gl.FLOAT, data);
+      if (mask) {
+        // R8 は 0..255 を 0..1 に正規化して読まれるので、内側を 255 にして送る
+        // （0/1 のまま送ると内側でも 1/255 = 0.004 になり、マスク判定が常に偽になる）
+        if (!this.maskScaled || this.maskScaled.length !== mask.length) {
+          this.maskScaled = new Uint8Array(mask.length);
+        }
+        for (var i = 0; i < mask.length; i++) this.maskScaled[i] = mask[i] ? 255 : 0;
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.texMask);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, N, N, 0, gl.RED, gl.UNSIGNED_BYTE, this.maskScaled);
+      }
+    }
+  };
+
+  ImageView.prototype.setParams = function (p) {
+    for (var k in p) if (p[k] !== undefined) this.params[k] = p[k];
+  };
+
+  ImageView.prototype.render = function () {
+    if (!this.data || !this.N) return;
+    var w = this.canvas.width;
+    var h = this.canvas.height;
+    if (!w || !h) return;
+    if (this.gl) this.renderGL(w, h);
+    else this.render2d(w, h);
+  };
+
+  ImageView.prototype.renderGL = function (w, h) {
+    var gl = this.gl;
+    var p = this.params;
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(this.prog);
+
+    if (this.cmapUploaded !== p.colormap) {
+      var lut = ZPV.colormaps.lut(p.colormap);
+      var rgba = new Uint8Array(256 * 4);
+      for (var i = 0; i < 256; i++) {
+        rgba[i * 4] = lut[i * 3];
+        rgba[i * 4 + 1] = lut[i * 3 + 1];
+        rgba[i * 4 + 2] = lut[i * 3 + 2];
+        rgba[i * 4 + 3] = 255;
+      }
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.texCmap);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+      this.cmapUploaded = p.colormap;
+    }
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texData);
+    gl.uniform1i(this.u.uData, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.texMask);
+    gl.uniform1i(this.u.uMask, 1);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.texCmap);
+    gl.uniform1i(this.u.uCmap, 2);
+
+    gl.uniform2f(this.u.uCenter, p.centerX, p.centerY);
+    gl.uniform1f(this.u.uHalf, p.halfExtent);
+    gl.uniform1i(this.u.uMode, p.mode === 'log' ? 1 : p.mode === 'gamma' ? 2 : 0);
+    gl.uniform1f(this.u.uVmin, p.vmin);
+    gl.uniform1f(this.u.uVmax, p.vmax);
+    gl.uniform1f(this.u.uFloorDb, p.floorDb);
+    gl.uniform1f(this.u.uGamma, p.gamma);
+    gl.uniform1i(this.u.uUseMask, p.useMask && this.mask ? 1 : 0);
+    gl.uniform3f(this.u.uMaskColor, 0.25, 0.25, 0.25);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+
+  ImageView.prototype.render2d = function (w, h) {
+    var p = this.params;
+    var N = this.N;
+    var lut = ZPV.colormaps.lut(p.colormap);
+    var img = this.ctx2d.createImageData(w, h);
+    var px = img.data;
+    var half = p.halfExtent;
+    for (var y = 0; y < h; y++) {
+      var v = p.centerY + ((y + 0.5) / h - 0.5) * 2 * half;
+      var row = Math.floor(v * N);
+      for (var x = 0; x < w; x++) {
+        var u = p.centerX + ((x + 0.5) / w - 0.5) * 2 * half;
+        var col = Math.floor(u * N);
+        var o = (y * w + x) * 4;
+        px[o + 3] = 255;
+        if (row < 0 || row >= N || col < 0 || col >= N ||
+            (p.useMask && this.mask && !this.mask[row * N + col])) {
+          px[o] = px[o + 1] = px[o + 2] = 64;
+          continue;
+        }
+        var val = this.data[row * N + col];
+        var t;
+        if (p.mode === 'log') {
+          var db = 10 * Math.log10(Math.max(val, 1e-30) / Math.max(p.vmax, 1e-30));
+          t = (db - p.floorDb) / (0 - p.floorDb);
+        } else {
+          t = (val - p.vmin) / Math.max(p.vmax - p.vmin, 1e-30);
+          if (p.mode === 'gamma') t = Math.pow(Math.max(t, 0), p.gamma);
+        }
+        var idx = Math.max(0, Math.min(255, Math.round(t * 255))) * 3;
+        px[o] = lut[idx];
+        px[o + 1] = lut[idx + 1];
+        px[o + 2] = lut[idx + 2];
+      }
+    }
+    this.ctx2d.putImageData(img, 0, 0);
+  };
+
+  /* 表示座標 (0..1) から配列インデックスへ */
+  ImageView.prototype.pickIndex = function (fx, fy) {
+    var p = this.params;
+    var u = p.centerX + (fx - 0.5) * 2 * p.halfExtent;
+    var v = p.centerY + (fy - 0.5) * 2 * p.halfExtent;
+    var col = Math.floor(u * this.N);
+    var row = Math.floor(v * this.N);
+    if (row < 0 || row >= this.N || col < 0 || col >= this.N) return null;
+    return { row: row, col: col, value: this.data[row * this.N + col] };
+  };
+
+  ZPV.ImageView = ImageView;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 断面プロット（Canvas2D）。SPEC.md FR-12 */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  function LinePlot(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+  }
+
+  /* series: [{ x: number[], y: number[], color, dash, label }] */
+  LinePlot.prototype.draw = function (series, opts) {
+    opts = opts || {};
+    var ctx = this.ctx;
+    var w = this.canvas.width;
+    var h = this.canvas.height;
+    var padL = 46;
+    var padR = 8;
+    var padT = 8;
+    var padB = 22;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#12151b';
+    ctx.fillRect(0, 0, w, h);
+    if (!series.length) return;
+
+    var logY = !!opts.logY;
+    var xmin = opts.xmin, xmax = opts.xmax, ymin = opts.ymin, ymax = opts.ymax;
+    var s, i;
+    if (xmin === undefined || xmax === undefined || ymin === undefined || ymax === undefined) {
+      xmin = Infinity; xmax = -Infinity; ymin = Infinity; ymax = -Infinity;
+      for (s = 0; s < series.length; s++) {
+        for (i = 0; i < series[s].x.length; i++) {
+          var xv = series[s].x[i], yv = series[s].y[i];
+          if (xv < xmin) xmin = xv;
+          if (xv > xmax) xmax = xv;
+          if (yv < ymin) ymin = yv;
+          if (yv > ymax) ymax = yv;
+        }
+      }
+    }
+    if (logY) {
+      ymin = opts.ymin !== undefined ? opts.ymin : Math.max(ymax * 1e-6, 1e-12);
+      ymax = Math.max(ymax, ymin * 10);
+    }
+    if (ymax === ymin) ymax = ymin + 1;
+
+    var tY = function (v) {
+      var t = logY
+        ? (Math.log10(Math.max(v, ymin)) - Math.log10(ymin)) / (Math.log10(ymax) - Math.log10(ymin))
+        : (v - ymin) / (ymax - ymin);
+      return h - padB - t * (h - padT - padB);
+    };
+    var tX = function (v) {
+      return padL + ((v - xmin) / (xmax - xmin || 1)) * (w - padL - padR);
+    };
+
+    // 目盛り
+    ctx.strokeStyle = '#2a2f3a';
+    ctx.fillStyle = '#8b93a7';
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.lineWidth = 1;
+    if (logY) {
+      // 対数軸はディケードごとに目盛る
+      var d0 = Math.ceil(Math.log10(ymin));
+      var d1 = Math.floor(Math.log10(ymax));
+      var stepD = Math.max(1, Math.ceil((d1 - d0 + 1) / 6));
+      for (var d = d0; d <= d1; d += stepD) {
+        var yv = Math.pow(10, d);
+        var yl = tY(yv);
+        ctx.beginPath();
+        ctx.moveTo(padL, yl);
+        ctx.lineTo(w - padR, yl);
+        ctx.stroke();
+        ctx.fillText('1e' + d, 2, yl + 3);
+      }
+    } else {
+      var nT = 4;
+      for (i = 0; i <= nT; i++) {
+        var yy = padT + ((h - padT - padB) * i) / nT;
+        ctx.beginPath();
+        ctx.moveTo(padL, yy);
+        ctx.lineTo(w - padR, yy);
+        ctx.stroke();
+        ctx.fillText((ymax - ((ymax - ymin) * i) / nT).toPrecision(2), 2, yy + 3);
+      }
+    }
+    for (i = 0; i <= 4; i++) {
+      var xv2 = xmin + ((xmax - xmin) * i) / 4;
+      var xx = tX(xv2);
+      ctx.beginPath();
+      ctx.moveTo(xx, padT);
+      ctx.lineTo(xx, h - padB);
+      ctx.stroke();
+      ctx.fillText(xv2.toFixed(1), xx - 8, h - 8);
+    }
+    if (opts.xlabel) {
+      ctx.fillText(opts.xlabel, w - padR - 60, h - 8);
+    }
+
+    for (s = 0; s < series.length; s++) {
+      var ser = series[s];
+      ctx.strokeStyle = ser.color || '#7fd1ff';
+      ctx.lineWidth = ser.width || 1.5;
+      ctx.setLineDash(ser.dash || []);
+      ctx.beginPath();
+      var started = false;
+      for (i = 0; i < ser.x.length; i++) {
+        var px = tX(ser.x[i]);
+        var py = tY(ser.y[i]);
+        if (!isFinite(py)) continue;
+        if (!started) { ctx.moveTo(px, py); started = true; }
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // 凡例
+    var lx = padL + 6;
+    for (s = 0; s < series.length; s++) {
+      if (!series[s].label) continue;
+      ctx.strokeStyle = series[s].color || '#7fd1ff';
+      ctx.setLineDash(series[s].dash || []);
+      ctx.beginPath();
+      ctx.moveTo(lx, padT + 8);
+      ctx.lineTo(lx + 16, padT + 8);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#c8cfdd';
+      ctx.fillText(series[s].label, lx + 20, padT + 11);
+      lx += 22 + ctx.measureText(series[s].label).width + 10;
+    }
+  };
+
+  ZPV.LinePlot = LinePlot;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+/* 設定 JSON と係数 CSV の入出力。SPEC.md §7 */
+(function (root) {
+  'use strict';
+  var ZPV = (root.ZPV = root.ZPV || {});
+
+  var SCHEMA_VERSION = 1;
+
+  /* --- 設定 JSON (§7.1) --------------------------------------------------- */
+
+  function toJson(state) {
+    var coefficients = [];
+    Object.keys(state.coeffs).forEach(function (k) {
+      var v = state.coeffs[k];
+      if (!v) return;
+      var nm = ZPV.noll.nollToNM(Number(k));
+      coefficients.push({ n: nm.n, m: nm.m, value: v });
+    });
+    coefficients.sort(function (a, b) {
+      return ZPV.noll.nmToNoll(a.n, a.m) - ZPV.noll.nmToNoll(b.n, b.m);
+    });
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      coefficientUnit: 'rad',
+      wavelengthNm: state.wavelengthNm,
+      indexScheme: 'Noll',
+      coefficients: coefficients,
+      pupil: state.pupil,
+      grid: { fftSize: state.N, samplingQ: state.q, previewFftSize: state.previewN },
+      psf: { normalization: 'sum' },
+      display: state.display
+    };
+  }
+
+  function fromJson(obj) {
+    if (!obj || typeof obj !== 'object') throw new Error('JSON の形式が不正です');
+    if (obj.schemaVersion !== SCHEMA_VERSION) {
+      throw new Error(
+        'schemaVersion ' + obj.schemaVersion + ' は未対応です（対応: ' + SCHEMA_VERSION + '）'
+      );
+    }
+    var coeffs = {};
+    (obj.coefficients || []).forEach(function (c) {
+      // 係数は必ず (n, m) で持つ（SPEC.md §7.1）
+      var j = ZPV.noll.nmToNoll(c.n, c.m);
+      coeffs[j] = Number(c.value) || 0;
+    });
+    var grid = obj.grid || {};
+    return {
+      coeffs: coeffs,
+      wavelengthNm: obj.wavelengthNm,
+      pupil: obj.pupil,
+      N: grid.fftSize,
+      q: grid.samplingQ,
+      previewN: grid.previewFftSize,
+      display: obj.display
+    };
+  }
+
+  /* --- 係数 CSV (§7.2) ---------------------------------------------------- */
+
+  /* opts: { scheme:'Noll'|'OSA'|'Fringe', nollStart:number, unit:'rad'|'waves'|'nm', wavelengthNm } */
+  function parseCoefficientCsv(text, opts) {
+    opts = opts || {};
+    var scheme = opts.scheme || 'Noll';
+    var start = opts.nollStart === undefined ? 1 : opts.nollStart;
+    var lines = String(text).replace(/^﻿/, '').split(/\r?\n/);
+    var rows = [];
+    for (var i = 0; i < lines.length; i++) {
+      var s = lines[i].trim();
+      if (!s || s[0] === '#') continue;
+      var parts = s.split(/[,\t ]+/).filter(function (p) { return p.length; });
+      var nums = parts.map(Number);
+      if (nums.some(isNaN)) continue; // ヘッダ行などは読み飛ばす
+      rows.push(nums);
+    }
+    if (!rows.length) throw new Error('数値行が見つかりませんでした');
+
+    var width = rows[0].length;
+    var coeffs = {};
+    var scale = unitToRad(opts.unit, opts.wavelengthNm);
+    var warnings = [];
+
+    if (width >= 3) {
+      // 形式 2: n, m, value
+      rows.forEach(function (r) {
+        try {
+          coeffs[ZPV.noll.nmToNoll(r[0], r[1])] = r[2] * scale;
+        } catch (e) {
+          warnings.push('(n,m)=(' + r[0] + ',' + r[1] + ') は範囲外のため無視しました');
+        }
+      });
+    } else if (width === 2) {
+      // 形式 1: index, value
+      rows.forEach(function (r) {
+        var j = toNoll(scheme, r[0]);
+        if (j) coeffs[j] = r[1] * scale;
+        else warnings.push('インデックス ' + r[0] + ' は範囲外のため無視しました');
+      });
+    } else {
+      // 値のみ 1 列: nollStart から連番
+      rows.forEach(function (r, k) {
+        var j = start + k;
+        if (j >= 1 && j <= ZPV.noll.J_MAX) coeffs[j] = r[0] * scale;
+      });
+    }
+    return { coeffs: coeffs, warnings: warnings, rowCount: rows.length, width: width };
+  }
+
+  function toNoll(scheme, index) {
+    if (scheme === 'Noll') {
+      return index >= 1 && index <= ZPV.noll.J_MAX ? index : 0;
+    }
+    for (var j = 1; j <= ZPV.noll.J_MAX; j++) {
+      var nm = ZPV.noll.nollToNM(j);
+      var v = scheme === 'OSA' ? ZPV.noll.nmToOsa(nm.n, nm.m) : ZPV.noll.nmToFringe(nm.n, nm.m);
+      if (v === index) return j;
+    }
+    return 0;
+  }
+
+  function unitToRad(unit, wavelengthNm) {
+    if (unit === 'waves') return 2 * Math.PI;
+    if (unit === 'nm') return (2 * Math.PI) / (wavelengthNm || 550);
+    return 1; // rad
+  }
+
+  function radToUnit(unit, wavelengthNm) {
+    return 1 / unitToRad(unit, wavelengthNm);
+  }
+
+  /* 書き出しは常に形式 2 (n, m, value)。 */
+  function formatCoefficientCsv(coeffs, opts) {
+    opts = opts || {};
+    var scale = radToUnit(opts.unit, opts.wavelengthNm);
+    var unitName = opts.unit === 'waves' ? 'waves' : opts.unit === 'nm' ? 'nm' : 'rad';
+    var out = ['# n,m,value  unit=' + unitName + '  scheme=(n,m)'];
+    Object.keys(coeffs)
+      .map(Number)
+      .sort(function (a, b) { return a - b; })
+      .forEach(function (j) {
+        if (!coeffs[j]) return;
+        var nm = ZPV.noll.nollToNM(j);
+        out.push(nm.n + ',' + nm.m + ',' + (coeffs[j] * scale).toPrecision(10));
+      });
+    return out.join('\n') + '\n';
+  }
+
+  /* --- マップ CSV (§7.3) -------------------------------------------------- */
+
+  function formatMapCsv(data, N, header) {
+    var lines = ['# ' + header];
+    for (var r = 0; r < N; r++) {
+      var row = new Array(N);
+      for (var c = 0; c < N; c++) row[c] = data[r * N + c].toPrecision(8);
+      lines.push(row.join(','));
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  ZPV.io = {
+    SCHEMA_VERSION: SCHEMA_VERSION,
+    toJson: toJson,
+    fromJson: fromJson,
+    parseCoefficientCsv: parseCoefficientCsv,
+    formatCoefficientCsv: formatCoefficientCsv,
+    formatMapCsv: formatMapCsv,
+    unitToRad: unitToRad,
+    radToUnit: radToUnit
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+/* UI 本体。SPEC.md §9 / §6
+ * 計算は Web Worker（作れない環境では同一スレッドの Engine）に投げ、
+ * 表示パラメータの変更は再計算せずシェーダのユニフォーム更新だけで済ませる。
+ */
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var noll = ZPV.noll;
+
+  /* ---------------- 状態 ---------------- */
+  var state = {
+    N: 1024,
+    q: 4,
+    previewN: 512,
+    pupil: {
+      shape: 'circular',
+      obscurationRatio: 0,
+      spider: { count: 0, widthPixels: 2, rotationDeg: 0 },
+      apodization: { type: 'none', width: 0.7 },
+      rect: { halfWidth: 1, halfHeight: 1 }
+    },
+    coeffs: {},
+    unit: 'rad',
+    wavelengthNm: 550,
+    nMax: 20,
+    sliderRange: 2,
+    filter: '',
+    nonZeroOnly: false,
+    excludePistonTilt: true,
+    display: {
+      pupilView: 'wavefront',
+      pupilColormap: 'coolwarm',
+      psfScale: 'log',
+      psfLogFloorDb: -50,
+      psfGamma: 0.4,
+      psfZoomLambdaOverD: 16,
+      psfColormap: 'viridis'
+    },
+    expanded: new Set([0, 1, 2, 3, 4])
+  };
+
+  var last = null;          // 直近の計算結果
+  var undoStack = [];
+  var redoStack = [];
+  var busy = false;
+  var pendingState = null;  // 未送信の最新リクエスト（中間の入力は捨てる）
+  var seq = 0;
+  var pupilView, psfView, plot;
+
+  /* ---------------- 計算バックエンド ----------------
+   *
+   * 通常は Blob URL から作った Web Worker で計算する（file:// でも動作する）。
+   * ただし Worker の生成が拒否されたり、生成できても起動しない環境がありうる。
+   * その場合 onerror が飛ばず沈黙することがあるため、ping/pong のハンドシェイクに
+   * タイムアウトを付けて判定し、応答が無ければメインスレッド実行に切り替える。
+   */
+  var HANDSHAKE_MS = 800;
+  var backend = { kind: 'pending', worker: null, engine: null, reason: '' };
+
+  /* URL に ?backend=main / ?backend=worker を付けると経路を固定できる
+   * （テストの決定性確保と、Worker が不調な環境での回避に使う）。 */
+  function forcedBackend() {
+    var m = /[?&]backend=(main|worker)/.exec(String(location.search || ''));
+    return m ? m[1] : null;
+  }
+
+  function initBackend() {
+    var forced = forcedBackend();
+    if (forced === 'main') {
+      useMainThread('URL の ?backend=main で指定されました');
+      return;
+    }
+    var srcEl = document.getElementById('zpv-worker-src');
+    if (!srcEl || typeof Worker === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) {
+      useMainThread('Worker API が使えません');
+      return;
+    }
+    var timer = forced === 'worker' ? null : setTimeout(function () {
+      useMainThread('Worker が ' + HANDSHAKE_MS + 'ms 以内に応答しませんでした');
+    }, HANDSHAKE_MS);
+    try {
+      var blob = new Blob([srcEl.textContent], { type: 'text/javascript' });
+      var w = new Worker(URL.createObjectURL(blob));
+      w.onmessage = function (e) {
+        if (e.data && e.data.type === 'pong') {
+          if (backend.kind !== 'pending') return; // 既にフォールバック済み
+          if (timer) clearTimeout(timer);
+          backend = { kind: 'worker', worker: w, engine: null, reason: '' };
+          updateBackendLabel();
+          pump();
+          return;
+        }
+        onWorkerMessage(e);
+      };
+      w.onerror = function (e) {
+        if (timer) clearTimeout(timer);
+        if (backend.kind === 'pending') useMainThread('Worker の起動に失敗: ' + (e.message || ''));
+        else showError('Worker でエラーが発生しました: ' + (e.message || ''));
+      };
+      backend.worker = w;
+      w.postMessage({ type: 'ping' });
+    } catch (e) {
+      if (timer) clearTimeout(timer);
+      useMainThread('Worker を作成できません: ' + e.message);
+    }
+  }
+
+  function useMainThread(reason) {
+    if (backend.kind === 'main') return;
+    if (backend.worker) { try { backend.worker.terminate(); } catch (e) { /* noop */ } }
+    backend = { kind: 'main', worker: null, engine: new ZPV.Engine(), reason: reason || '' };
+    updateBackendLabel();
+    pump();
+  }
+
+  function onWorkerMessage(e) {
+    var msg = e.data;
+    if (msg.type === 'result') {
+      busy = false;
+      applyResult(msg.result);
+      pump();
+    } else if (msg.type === 'error') {
+      busy = false;
+      showError('計算に失敗しました: ' + msg.message + '\n' + msg.stack);
+      pump();
+    }
+  }
+
+  function snapshotState(preview) {
+    var N = preview && state.previewN && state.previewN < state.N ? state.previewN : state.N;
+    return {
+      N: N,
+      q: state.q,
+      pupil: JSON.parse(JSON.stringify(state.pupil)),
+      coeffs: Object.assign({}, state.coeffs),
+      excludePistonTilt: state.excludePistonTilt,
+      eeRadiusLD: 3
+    };
+  }
+
+  function requestCompute(preview) {
+    pendingState = snapshotState(preview);
+    pump();
+  }
+
+  /* 常に最新のリクエストだけを処理し、中間の入力は捨てる（SPEC.md §8.2） */
+  function pump() {
+    if (backend.kind === 'pending' || busy || !pendingState) return;
+    var s = pendingState;
+    pendingState = null;
+    busy = true;
+    seq++;
+    if (backend.kind === 'worker') {
+      backend.worker.postMessage({ type: 'compute', id: seq, state: s });
+      return;
+    }
+    // メインスレッド実行。描画を先に反映させるため 1 tick 譲る
+    setTimeout(function () {
+      try {
+        var r = backend.engine.compute(s);
+        busy = false;
+        applyResult(r);
+        pump();
+      } catch (err) {
+        busy = false;
+        showError('計算に失敗しました: ' + err.message + '\n' + (err.stack || ''));
+        pump();
+      }
+    }, 0);
+  }
+
+  function updateBackendLabel() {
+    var el = $('stBackend');
+    if (!el) return;
+    el.textContent =
+      (backend.kind === 'worker' ? 'Worker' : backend.kind === 'main' ? 'メインスレッド' : '準備中') +
+      ' / ' + (psfView ? psfView.backend : '-');
+    el.title = backend.reason || '';
+  }
+
+  /* ---------------- 結果の反映 ---------------- */
+  function applyResult(r) {
+    last = r;
+    var pupilData = state.display.pupilView === 'amplitude' ? r.amplitude : r.wavefront;
+    pupilView.setData(pupilData, r.N, r.mask);
+    psfView.setData(r.psf, r.N, null);
+    updateViewParams();
+    updateMetrics(r);
+    updatePlot(r);
+    updateStatus(r);
+  }
+
+  function updateViewParams() {
+    if (!last) return;
+    var r = last;
+    var d = state.display;
+
+    var amp = d.pupilView === 'amplitude';
+    var lim = Math.max(Math.abs(r.wavefrontMin), Math.abs(r.wavefrontMax), 1e-9);
+    pupilView.setParams({
+      mode: 'linear',
+      vmin: amp ? 0 : -lim,
+      vmax: amp ? 1 : lim,
+      colormap: amp ? 'grayscale' : d.pupilColormap,
+      useMask: true,
+      centerX: 0.5,
+      centerY: 0.5,
+      halfExtent: Math.min(0.5, (0.56 * r.pupilDiameterPx) / r.N)
+    });
+    setColorbar('cbPupil', amp ? 'grayscale' : d.pupilColormap,
+      amp ? '1.00' : fmt(lim), amp ? '0.00' : fmt(-lim), 'pupHi', 'pupLo');
+
+    var halfPx = d.psfZoomLambdaOverD * r.q;
+    psfView.setParams({
+      mode: d.psfScale,
+      vmin: 0,
+      vmax: r.psfPeak,
+      floorDb: d.psfLogFloorDb,
+      gamma: d.psfGamma,
+      colormap: d.psfColormap,
+      centerX: 0.5,
+      centerY: 0.5,
+      halfExtent: Math.min(0.5, halfPx / r.N)
+    });
+    setColorbar('cbPsf', d.psfColormap,
+      d.psfScale === 'log' ? '0 dB' : fmt(r.psfPeak),
+      d.psfScale === 'log' ? d.psfLogFloorDb + ' dB' : '0',
+      'psfHi', 'psfLo');
+
+    pupilView.render();
+    psfView.render();
+  }
+
+  function setColorbar(canvasId, cmap, hi, lo, hiId, loId) {
+    var cv = $(canvasId);
+    var ctx = cv.getContext('2d');
+    var lut = ZPV.colormaps.lut(cmap);
+    var img = ctx.createImageData(cv.width, cv.height);
+    for (var y = 0; y < cv.height; y++) {
+      var t = 1 - y / (cv.height - 1);
+      var idx = Math.round(t * 255) * 3;
+      for (var x = 0; x < cv.width; x++) {
+        var o = (y * cv.width + x) * 4;
+        img.data[o] = lut[idx];
+        img.data[o + 1] = lut[idx + 1];
+        img.data[o + 2] = lut[idx + 2];
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    $(hiId).textContent = hi;
+    $(loId).textContent = lo;
+  }
+
+  function fmt(v) {
+    if (!isFinite(v)) return '–';
+    var a = Math.abs(v);
+    if (a === 0) return '0';
+    if (a < 1e-3 || a >= 1e5) return v.toExponential(1);
+    return v.toPrecision(3);
+  }
+
+  function updateMetrics(r) {
+    var m = r.metrics;
+    var scale = ZPV.io.radToUnit(state.unit, state.wavelengthNm);
+    var u = unitLabel();
+    $('mRms').textContent = (m.rms * scale).toPrecision(3) + ' ' + u;
+    $('mPv').textContent = (m.pv * scale).toPrecision(3) + ' ' + u;
+    $('mStrehl').textContent = m.strehlDefinition.toFixed(4);
+    $('mStrehlPk').textContent = m.strehlPeak.toFixed(4);
+    $('mMarechal').textContent = m.marechal.toFixed(4);
+    $('mFwhm').textContent = isFinite(m.fwhm) ? m.fwhm.toFixed(3) + ' λ/D' : '–';
+    $('mEe').textContent = m.ee.toFixed(4);
+    $('mModes').textContent = m.modeCount + ' / ' + noll.J_MAX;
+    var nonCircular = state.pupil.obscurationRatio > 0 ||
+      state.pupil.spider.count > 0 || state.pupil.shape !== 'circular' ||
+      state.pupil.apodization.type !== 'none';
+    $('mNote').textContent = nonCircular
+      ? '※ 非円形瞳のため Zernike の直交性は崩れています（RMS はマップから数値計算）'
+      : '';
+  }
+
+  function updatePlot(r) {
+    var q = r.q;
+    var half = Math.min(state.display.psfZoomLambdaOverD, r.N / 2 / q);
+    var n = Math.round(half * q);
+    var xs = [];
+    var ys = [];
+    var ideal = [];
+    var row = r.N / 2;
+    var col = r.N / 2;
+    for (var k = -n; k <= n; k++) {
+      var c = col + k;
+      if (c < 0 || c >= r.N) continue;
+      xs.push(k / q);
+      ys.push(r.psf[row * r.N + c] / Math.max(r.psfPeak, 1e-30));
+      ideal.push(ZPV.metrics.airy(Math.abs(k) / q));
+    }
+    var logY = state.display.psfScale === 'log';
+    plot.draw(
+      [
+        { x: xs, y: ideal, color: '#8b93a7', dash: [3, 3], label: '理想 Airy' },
+        { x: xs, y: ys, color: '#58a6ff', label: '実測' }
+      ],
+      {
+        logY: logY,
+        ymin: logY ? Math.pow(10, state.display.psfLogFloorDb / 10) : 0,
+        ymax: 1,
+        xlabel: 'λ/D'
+      }
+    );
+  }
+
+  function updateStatus(r) {
+    $('stGrid').textContent =
+      'N=' + r.N + ' q=' + r.q + ' 瞳直径=' + r.pupilDiameterPx.toFixed(2) + 'px' +
+      ' (マスク内 ' + r.maskCount.toLocaleString() + ' 画素)';
+    $('stTime').textContent =
+      '計算 ' + r.timings.total.toFixed(1) + ' ms' +
+      ' (波面 ' + r.timings.wavefront.toFixed(1) + ' / FFT ' + r.timings.fft.toFixed(1) + ')';
+    updateBackendLabel();
+    $('stCache').textContent =
+      '基底 ' + r.cache.entries + ' 件 ' + (r.cache.bytes / 1048576).toFixed(1) + ' MB';
+    $('outDpix').textContent = r.pupilDiameterPx.toFixed(2) + ' 画素';
+  }
+
+  function showError(msg) {
+    var box = $('errBox');
+    box.style.display = 'block';
+    box.textContent = msg;
+  }
+
+  /* ---------------- 係数表 ---------------- */
+  function unitLabel() {
+    return state.unit === 'rad' ? 'rad' : state.unit === 'waves' ? 'λ' : 'nm';
+  }
+
+  function toDisplay(rad) { return rad * ZPV.io.radToUnit(state.unit, state.wavelengthNm); }
+  function toRad(v) { return v * ZPV.io.unitToRad(state.unit, state.wavelengthNm); }
+
+  function matchesFilter(j, nm) {
+    if (!state.filter) return true;
+    var f = state.filter.toLowerCase();
+    var text = j + ' (' + nm.n + ',' + nm.m + ') ' + noll.modeName(nm.n, nm.m) +
+      ' osa' + noll.nmToOsa(nm.n, nm.m) + ' fringe' + noll.nmToFringe(nm.n, nm.m);
+    return text.toLowerCase().indexOf(f) >= 0;
+  }
+
+  function buildTable() {
+    var host = $('coeffTable');
+    host.textContent = '';
+    var range = toDisplay(state.sliderRange);
+    var step = range / 1000;
+    var frag = document.createDocumentFragment();
+
+    for (var n = 0; n <= state.nMax; n++) {
+      var range2 = noll.nollRangeForOrder(n);
+      var rows = [];
+      var nz = 0;
+      for (var j = range2[0]; j <= range2[1]; j++) {
+        var nm = noll.nollToNM(j);
+        if (state.coeffs[j]) nz++;
+        if (state.nonZeroOnly && !state.coeffs[j]) continue;
+        if (!matchesFilter(j, nm)) continue;
+        rows.push({ j: j, nm: nm });
+      }
+      if (!rows.length && (state.nonZeroOnly || state.filter)) continue;
+
+      var open = state.expanded.has(n) || !!state.filter;
+      var grp = document.createElement('div');
+      grp.className = 'grp' + (nz ? ' has-nz' : '');
+      grp.dataset.order = n;
+      grp.innerHTML =
+        '<span class="caret">' + (open ? '▼' : '▶') + '</span>' +
+        '<span>n = ' + n + '</span>' +
+        '<span class="cnt">' + (range2[1] - range2[0] + 1) + ' 項' +
+        (nz ? ' / 非ゼロ ' + nz : '') + '</span>';
+      frag.appendChild(grp);
+      if (!open) continue;
+
+      for (var i = 0; i < rows.length; i++) {
+        var j2 = rows[i].j;
+        var nm2 = rows[i].nm;
+        var val = toDisplay(state.coeffs[j2] || 0);
+        var el = document.createElement('div');
+        el.className = 'crow' + (state.coeffs[j2] ? ' nz' : '');
+        el.dataset.j = j2;
+        el.innerHTML =
+          '<span class="j">' + j2 + '</span>' +
+          '<span class="nm">(' + nm2.n + ',' + (nm2.m >= 0 ? '+' : '') + nm2.m + ')</span>' +
+          '<span class="nme" title="Noll ' + j2 + ' / OSA ' + noll.nmToOsa(nm2.n, nm2.m) +
+          ' / Fringe ' + noll.nmToFringe(nm2.n, nm2.m) + '（名称は表示用ラベル）">' +
+          noll.modeName(nm2.n, nm2.m) + '</span>' +
+          '<input type="number" class="val" step="' + (step * 10).toPrecision(2) +
+          '" value="' + trimNum(val) + '">' +
+          '<input type="range" class="sld" min="' + -range + '" max="' + range +
+          '" step="' + step + '" value="' + val + '">';
+        frag.appendChild(el);
+      }
+    }
+    host.appendChild(frag);
+  }
+
+  function trimNum(v) {
+    if (!v) return '0';
+    return Number(v.toPrecision(6)).toString();
+  }
+
+  /* 値だけを更新する（表の再構築を避ける） */
+  function refreshRowValues() {
+    var rows = $('coeffTable').querySelectorAll('.crow');
+    for (var i = 0; i < rows.length; i++) {
+      var j = Number(rows[i].dataset.j);
+      var v = toDisplay(state.coeffs[j] || 0);
+      var num = rows[i].querySelector('.val');
+      var sld = rows[i].querySelector('.sld');
+      if (document.activeElement !== num) num.value = trimNum(v);
+      if (document.activeElement !== sld) sld.value = v;
+      rows[i].classList.toggle('nz', !!state.coeffs[j]);
+    }
+  }
+
+  /* ---------------- Undo / Redo ---------------- */
+  function pushUndo() {
+    undoStack.push(Object.assign({}, state.coeffs));
+    if (undoStack.length > 32) undoStack.shift();
+    redoStack.length = 0;
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(Object.assign({}, state.coeffs));
+    state.coeffs = undoStack.pop();
+    buildTable();
+    requestCompute(false);
+  }
+
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(Object.assign({}, state.coeffs));
+    state.coeffs = redoStack.pop();
+    buildTable();
+    requestCompute(false);
+  }
+
+  /* ---------------- ファイル入出力 ---------------- */
+  function download(name, text, mime) {
+    var blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
+  function pickFile(accept, cb) {
+    var inp = $('filePicker');
+    inp.accept = accept;
+    inp.onchange = function () {
+      var f = inp.files && inp.files[0];
+      if (!f) return;
+      var fr = new FileReader();
+      fr.onload = function () { cb(String(fr.result), f.name); inp.value = ''; };
+      fr.readAsText(f);
+    };
+    inp.click();
+  }
+
+  function exportPng() {
+    var src = $('cvPsf');
+    var w = src.width;
+    var h = src.height;
+    var out = document.createElement('canvas');
+    out.width = w;
+    out.height = h + 26;
+    var ctx = out.getContext('2d');
+    ctx.fillStyle = '#0d1017';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(src, 0, 0);
+    ctx.fillStyle = '#d6dbe6';
+    ctx.font = '12px sans-serif';
+    var r = last || {};
+    ctx.fillText(
+      'PSF  N=' + r.N + ' q=' + r.q + '  ±' + state.display.psfZoomLambdaOverD +
+      ' λ/D  ' + state.display.psfScale +
+      (state.display.psfScale === 'log' ? ' (' + state.display.psfLogFloorDb + ' dB)' : '') +
+      '  Strehl=' + (r.metrics ? r.metrics.strehlDefinition.toFixed(4) : '-'),
+      6, h + 17
+    );
+    out.toBlob(function (b) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'psf.png';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    });
+  }
+
+  /* ---------------- キャンバスのサイズ調整 ---------------- */
+  function resizeCanvas(cv) {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var r = cv.parentElement.getBoundingClientRect();
+    var w = Math.max(1, Math.round(r.width * dpr));
+    var h = Math.max(1, Math.round(r.height * dpr));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; return true; }
+    return false;
+  }
+
+  function resizeAll() {
+    resizeCanvas($('cvPupil'));
+    resizeCanvas($('cvPsf'));
+    var p = $('plot');
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    p.width = Math.max(1, Math.round(p.clientWidth * dpr));
+    p.height = Math.max(1, Math.round(p.clientHeight * dpr));
+    pupilView.render();
+    psfView.render();
+    if (last) updatePlot(last);
+  }
+
+  /* ---------------- イベント ---------------- */
+  function onCoeffInput(e) {
+    var rowEl = e.target.closest('.crow');
+    if (!rowEl) return;
+    var j = Number(rowEl.dataset.j);
+    var v = Number(e.target.value);
+    if (!isFinite(v)) return;
+    state.coeffs[j] = toRad(v);
+    if (!state.coeffs[j]) delete state.coeffs[j];
+    rowEl.classList.toggle('nz', !!state.coeffs[j]);
+    var other = e.target.classList.contains('sld') ? rowEl.querySelector('.val') : rowEl.querySelector('.sld');
+    other.value = e.target.classList.contains('sld') ? trimNum(v) : v;
+    requestCompute(e.type === 'input' && e.target.classList.contains('sld'));
+  }
+
+  function bind() {
+    var t = $('coeffTable');
+    t.addEventListener('input', onCoeffInput);
+    t.addEventListener('change', function (e) {
+      if (e.target.closest('.crow')) { pushUndo(); requestCompute(false); }
+    });
+    t.addEventListener('click', function (e) {
+      var g = e.target.closest('.grp');
+      if (!g) return;
+      var n = Number(g.dataset.order);
+      if (state.expanded.has(n)) state.expanded.delete(n);
+      else state.expanded.add(n);
+      buildTable();
+    });
+
+    // グリッド・瞳
+    $('inN').onchange = function () { state.N = Number(this.value); requestCompute(false); };
+    $('inQ').onchange = function () { state.q = Number(this.value) || 4; requestCompute(false); };
+    $('inPreview').onchange = function () { state.previewN = Number(this.value); };
+    $('inShape').onchange = function () { state.pupil.shape = this.value; requestCompute(false); };
+    $('inEps').onchange = function () { state.pupil.obscurationRatio = Number(this.value) || 0; requestCompute(false); };
+    $('inSpider').onchange = function () { state.pupil.spider.count = Number(this.value); requestCompute(false); };
+    $('inSpiderW').onchange = function () { state.pupil.spider.widthPixels = Number(this.value) || 2; requestCompute(false); };
+    $('inApod').onchange = function () { state.pupil.apodization.type = this.value; requestCompute(false); };
+    $('inApodW').onchange = function () { state.pupil.apodization.width = Number(this.value) || 0.7; requestCompute(false); };
+
+    // 係数表の見せ方
+    $('inUnit').onchange = function () { state.unit = this.value; buildTable(); if (last) updateMetrics(last); };
+    $('inLambda').onchange = function () { state.wavelengthNm = Number(this.value) || 550; buildTable(); if (last) updateMetrics(last); };
+    $('inNmax').onchange = function () { state.nMax = Number(this.value); buildTable(); };
+    $('inRange').onchange = function () { state.sliderRange = Number(this.value) || 2; buildTable(); };
+    $('inFilter').oninput = function () { state.filter = this.value.trim(); buildTable(); };
+    $('inNonZero').onchange = function () { state.nonZeroOnly = this.checked; buildTable(); };
+    $('btnExpandAll').onclick = function () {
+      for (var n = 0; n <= state.nMax; n++) state.expanded.add(n);
+      buildTable();
+    };
+    $('btnCollapseAll').onclick = function () { state.expanded.clear(); buildTable(); };
+
+    // 表示
+    $('inPupilView').onchange = function () {
+      state.display.pupilView = this.value;
+      if (last) applyResult(last);
+    };
+    $('inPupCmap').onchange = function () { state.display.pupilColormap = this.value; updateViewParams(); };
+    $('inPsfCmap').onchange = function () { state.display.psfColormap = this.value; updateViewParams(); };
+    $('inScale').onchange = function () {
+      state.display.psfScale = this.value;
+      $('inFloor').style.display = this.value === 'log' ? '' : 'none';
+      $('inGamma').style.display = this.value === 'gamma' ? '' : 'none';
+      updateViewParams();
+      if (last) updatePlot(last);
+    };
+    $('inFloor').oninput = function () {
+      state.display.psfLogFloorDb = Number(this.value) || -50;
+      updateViewParams();
+      if (last) updatePlot(last);
+    };
+    $('inGamma').oninput = function () { state.display.psfGamma = Number(this.value) || 0.4; updateViewParams(); };
+    $('inZoom').oninput = function () {
+      state.display.psfZoomLambdaOverD = Math.max(0.5, Number(this.value) || 16);
+      updateViewParams();
+      if (last) updatePlot(last);
+    };
+    $('inExclude').onchange = function () { state.excludePistonTilt = this.checked; requestCompute(false); };
+
+    // ボタン
+    $('btnClear').onclick = function () { pushUndo(); state.coeffs = {}; buildTable(); requestCompute(false); };
+    $('btnRandom').onclick = function () {
+      pushUndo();
+      state.coeffs = {};
+      var total = 0.8; // RMS 合計 [rad]
+      var jmax = noll.nollRangeForOrder(Math.min(state.nMax, 6))[1];
+      var vals = [];
+      for (var j = 4; j <= jmax; j++) vals.push((Math.random() * 2 - 1) / Math.pow(noll.nollToNM(j).n, 1.2));
+      var norm = Math.sqrt(vals.reduce(function (a, b) { return a + b * b; }, 0)) || 1;
+      for (var k = 0; k < vals.length; k++) state.coeffs[4 + k] = (vals[k] / norm) * total;
+      buildTable();
+      requestCompute(false);
+    };
+    $('btnUndo').onclick = undo;
+    $('btnRedo').onclick = redo;
+    $('btnHelp').onclick = function () { $('dlgHelp').showModal(); };
+
+    $('btnSave').onclick = function () {
+      download('zernike-psf.zpsf.json', JSON.stringify(ZPV.io.toJson(state), null, 2), 'application/json');
+    };
+    $('btnLoad').onclick = function () {
+      pickFile('.json', function (text) {
+        try {
+          var s = ZPV.io.fromJson(JSON.parse(text));
+          pushUndo();
+          if (s.coeffs) state.coeffs = s.coeffs;
+          if (s.pupil) state.pupil = ZPV.pupil.merge(state.pupil, s.pupil);
+          if (s.N) state.N = s.N;
+          if (s.q) state.q = s.q;
+          if (s.wavelengthNm) state.wavelengthNm = s.wavelengthNm;
+          if (s.display) Object.assign(state.display, s.display);
+          syncControls();
+          buildTable();
+          requestCompute(false);
+        } catch (err) {
+          showError('読込に失敗しました: ' + err.message);
+        }
+      });
+    };
+    $('btnCsvIn').onclick = function () {
+      pickFile('.csv,.txt', function (text) {
+        var startStr = window.prompt(
+          '先頭要素に対応する Noll 番号を入力してください。\n' +
+          '（torchmfbd のモード列はピストンを含まないため 2 です）', '1');
+        if (startStr === null) return;
+        try {
+          var res = ZPV.io.parseCoefficientCsv(text, {
+            scheme: 'Noll',
+            nollStart: Number(startStr) || 1,
+            unit: state.unit,
+            wavelengthNm: state.wavelengthNm
+          });
+          pushUndo();
+          state.coeffs = res.coeffs;
+          buildTable();
+          requestCompute(false);
+          if (res.warnings.length) showError(res.warnings.join('\n'));
+          else $('errBox').style.display = 'none';
+        } catch (err) {
+          showError('CSV の読込に失敗しました: ' + err.message);
+        }
+      });
+    };
+    $('btnCsvOut').onclick = function () {
+      download('zernike-coefficients.csv',
+        ZPV.io.formatCoefficientCsv(state.coeffs, { unit: state.unit, wavelengthNm: state.wavelengthNm }),
+        'text/csv;charset=utf-8');
+    };
+    $('btnPng').onclick = exportPng;
+
+    // カーソル読み取りとホイールズーム
+    hookCanvas($('cvPsf'), psfView, function (p, r) {
+      var x = (p.col - r.N / 2) / r.q;
+      var y = (p.row - r.N / 2) / r.q;
+      return 'PSF (' + x.toFixed(2) + ', ' + y.toFixed(2) + ') λ/D  I=' +
+        (p.value / Math.max(r.psfPeak, 1e-30)).toExponential(3) + ' (ピーク比)';
+    });
+    hookCanvas($('cvPupil'), pupilView, function (p, r) {
+      var half = r.pupilDiameterPx / 2;
+      var x = (p.col - r.N / 2) / half;
+      var y = (p.row - r.N / 2) / half;
+      var v = pupilView.data[p.row * r.N + p.col];
+      return '瞳 (' + x.toFixed(3) + ', ' + y.toFixed(3) + ')  ' +
+        (state.display.pupilView === 'amplitude' ? 'A=' + v.toFixed(3) : 'W=' + v.toFixed(4) + ' rad');
+    });
+
+    $('cvPsf').addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var f = e.deltaY > 0 ? 1.25 : 0.8;
+      state.display.psfZoomLambdaOverD = Math.max(0.5, Math.min(256, state.display.psfZoomLambdaOverD * f));
+      $('inZoom').value = state.display.psfZoomLambdaOverD.toFixed(1);
+      updateViewParams();
+      if (last) updatePlot(last);
+    }, { passive: false });
+
+    window.addEventListener('resize', resizeAll);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('keyup', onKeyUp);
+  }
+
+  function hookCanvas(cv, view, formatter) {
+    cv.addEventListener('mousemove', function (e) {
+      if (!last) return;
+      var b = cv.getBoundingClientRect();
+      var p = view.pickIndex((e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height);
+      $('stCursor').textContent = p ? formatter(p, last) : '–';
+    });
+    cv.addEventListener('mouseleave', function () { $('stCursor').textContent = '–'; });
+  }
+
+  var compareSaved = null;
+
+  function onKeyUp(e) {
+    if (e.key === ' ' && compareSaved !== null) {
+      state.coeffs = compareSaved;
+      compareSaved = null;
+      requestCompute(false);
+    }
+  }
+
+  function onKey(e) {
+    var tag = (e.target.tagName || '').toLowerCase();
+    var typing = tag === 'input' && e.target.type !== 'range';
+    if (e.ctrlKey || e.metaKey) {
+      var k = e.key.toLowerCase();
+      if (k === 'f') { e.preventDefault(); $('inFilter').focus(); $('inFilter').select(); }
+      else if (k === 'n') { e.preventDefault(); $('btnClear').click(); }
+      else if (k === 's') { e.preventDefault(); $('btnSave').click(); }
+      else if (k === 'o') { e.preventDefault(); $('btnLoad').click(); }
+      else if (k === 'e') { e.preventDefault(); $('btnPng').click(); }
+      else if (k === 'z') { e.preventDefault(); undo(); }
+      else if (k === 'y') { e.preventDefault(); redo(); }
+      return;
+    }
+    if (e.key === 'F1') { e.preventDefault(); $('dlgHelp').showModal(); return; }
+    if (e.key === ' ' && !typing && compareSaved === null) {
+      // 押している間だけ無収差状態を表示する
+      e.preventDefault();
+      compareSaved = state.coeffs;
+      state.coeffs = {};
+      requestCompute(false);
+      return;
+    }
+    if (typing) {
+      var row = e.target.closest && e.target.closest('.crow');
+      if (row && (e.key === 'ArrowUp' || e.key === 'ArrowDown' ||
+                  e.key === 'PageUp' || e.key === 'PageDown')) {
+        e.preventDefault();
+        var stepRad = e.key === 'PageUp' || e.key === 'PageDown' ? 0.5 : (e.shiftKey ? 0.005 : 0.05);
+        var sign = e.key === 'ArrowUp' || e.key === 'PageUp' ? 1 : -1;
+        var j = Number(row.dataset.j);
+        state.coeffs[j] = (state.coeffs[j] || 0) + sign * stepRad;
+        if (!state.coeffs[j]) delete state.coeffs[j];
+        e.target.value = trimNum(toDisplay(state.coeffs[j] || 0));
+        row.querySelector('.sld').value = toDisplay(state.coeffs[j] || 0);
+        row.classList.toggle('nz', !!state.coeffs[j]);
+        requestCompute(false);
+      }
+      return;
+    }
+    if (e.key === 'l' || e.key === 'L') {
+      var sel = $('inScale');
+      sel.value = sel.value === 'log' ? 'linear' : 'log';
+      sel.onchange();
+    } else if (e.key === 'r' || e.key === 'R') {
+      if (last) updateViewParams();
+    }
+  }
+
+  function syncControls() {
+    $('inN').value = String(state.N);
+    $('inQ').value = state.q;
+    $('inPreview').value = String(state.previewN);
+    $('inShape').value = state.pupil.shape;
+    $('inEps').value = state.pupil.obscurationRatio;
+    $('inSpider').value = String(state.pupil.spider.count);
+    $('inSpiderW').value = state.pupil.spider.widthPixels;
+    $('inApod').value = state.pupil.apodization.type;
+    $('inApodW').value = state.pupil.apodization.width;
+    $('inUnit').value = state.unit;
+    $('inLambda').value = state.wavelengthNm;
+    $('inNmax').value = String(state.nMax);
+    $('inRange').value = state.sliderRange;
+    $('inNonZero').checked = state.nonZeroOnly;
+    $('inExclude').checked = state.excludePistonTilt;
+    $('inPupilView').value = state.display.pupilView;
+    $('inPupCmap').value = state.display.pupilColormap;
+    $('inPsfCmap').value = state.display.psfColormap;
+    $('inScale').value = state.display.psfScale;
+    $('inFloor').value = state.display.psfLogFloorDb;
+    $('inGamma').value = state.display.psfGamma;
+    $('inZoom').value = state.display.psfZoomLambdaOverD;
+    $('inFloor').style.display = state.display.psfScale === 'log' ? '' : 'none';
+    $('inGamma').style.display = state.display.psfScale === 'gamma' ? '' : 'none';
+  }
+
+  function fillColormapSelects() {
+    ['inPupCmap', 'inPsfCmap'].forEach(function (id) {
+      var sel = $(id);
+      ZPV.colormaps.names.forEach(function (n) {
+        var o = document.createElement('option');
+        o.value = n;
+        o.textContent = ZPV.colormaps.labels[n] || n;
+        sel.appendChild(o);
+      });
+    });
+  }
+
+  /* ---------------- 起動 ---------------- */
+  function start() {
+    window.addEventListener('error', function (e) {
+      showError('未捕捉のエラー: ' + (e.message || '') + '\n' + ((e.error && e.error.stack) || ''));
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      showError('未処理の Promise 拒否: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+    });
+    pupilView = new ZPV.ImageView($('cvPupil'));
+    psfView = new ZPV.ImageView($('cvPsf'));
+    plot = new ZPV.LinePlot($('plot'));
+    if (psfView.glError) {
+      showError('WebGL2 が使えないため Canvas2D で描画します: ' + psfView.glError);
+    }
+    fillColormapSelects();
+    syncControls();
+    initBackend();
+    bind();
+    buildTable();
+    // 初期状態はデフォーカスと球面収差を少し入れておく
+    state.coeffs = { 4: 0.3, 11: 0.5 };
+    buildTable();
+    // rAF はフレームを描かない状況（バックグラウンドタブ、ヘッドレスの DOM ダンプ）では
+    // 発火しないため、初回計算は rAF に依存させない。
+    resizeAll();
+    requestCompute(false);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(resizeAll); // レイアウト確定後にもう一度サイズを合わせる
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+</script>
+</body>
+</html>

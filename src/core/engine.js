@@ -18,6 +18,7 @@
   }
 
   Engine.prototype.ensureGrid = function (N, q, pupilOpts) {
+    ZPV.pupil.validate(N, q, true); // FFT を使うので 2 のべき乗が必要
     var key = ZPV.pupil.gridKey(N, q, pupilOpts);
     if (this.gridKey === key && this.grid) return this.grid;
     this.grid = ZPV.pupil.buildGrid(N, q, pupilOpts);

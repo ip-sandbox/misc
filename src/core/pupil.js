@@ -32,8 +32,24 @@
     return out;
   }
 
+  /* 入力の検証。異常値で黙って空の結果を返さないようにする（SPEC.md IT-05）。
+   * 2 のべき乗が要るのは FFT だけなので、格子生成では要求しない
+   * （直交性の検証には q=1, N=513 のような格子を使う）。 */
+  function validate(N, q, requirePowerOfTwo) {
+    if (typeof N !== 'number' || !isFinite(N) || N !== Math.floor(N) || N < 8 || N > 8192) {
+      throw new RangeError('配列サイズ N は 8〜8192 の整数である必要があります: ' + N);
+    }
+    if (requirePowerOfTwo && (N & (N - 1)) !== 0) {
+      throw new RangeError('FFT を使うため配列サイズ N は 2 のべき乗である必要があります: ' + N);
+    }
+    if (typeof q !== 'number' || !isFinite(q) || q <= 0) {
+      throw new RangeError('サンプリング q は正の有限値である必要があります: ' + q);
+    }
+  }
+
   /* N x N の格子を作り、マスク内サンプルだけをパックして返す。 */
   function buildGrid(N, q, pupilOpts) {
+    validate(N, q, false);
     var opt = merge(DEFAULT_PUPIL, pupilOpts);
     var step = 2 / (N - 1);
     var xs = new Float64Array(N);
@@ -64,10 +80,14 @@
           inside = r <= 1 && r >= eps;
         }
         if (inside && spider.count > 0 && spiderHalf > 0) {
+          // count は「腕の本数」。各腕は中心から外向きの半直線なので、
+          // 直線ではなく半直線（射影が正の側）だけを遮蔽する。
           for (k = 0; k < spider.count; k++) {
-            ang = spiderRot + (Math.PI * k) / spider.count;
-            // 直線 (cos ang, sin ang) 方向のスパイダーからの距離
-            dist = Math.abs(x * Math.sin(ang) - y * Math.cos(ang));
+            ang = spiderRot + (2 * Math.PI * k) / spider.count;
+            var dxk = Math.cos(ang);
+            var dyk = Math.sin(ang);
+            if (x * dxk + y * dyk < 0) continue; // 反対側は別の腕が担当する
+            dist = Math.abs(x * dyk - y * dxk);
             if (dist <= spiderHalf) {
               inside = false;
               break;
@@ -124,6 +144,7 @@
 
   ZPV.pupil = {
     DEFAULT_PUPIL: DEFAULT_PUPIL,
+    validate: validate,
     buildGrid: buildGrid,
     gridKey: gridKey,
     merge: merge

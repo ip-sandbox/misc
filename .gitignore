@@ -8,9 +8,11 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+build/*
+!build/build.mjs
 develop-eggs/
-dist/
+dist/*
+!dist/ZernikePsfViewer.html
 downloads/
 eggs/
 .eggs/

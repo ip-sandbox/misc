@@ -1,0 +1,208 @@
+<div id="app">
+  <header>
+    <h1>Zernike PSF Viewer</h1>
+    <button id="btnClear" title="全係数をゼロにする (Ctrl+N)">クリア</button>
+    <button id="btnRandom" title="ランダムな収差を生成">ランダム</button>
+    <button id="btnUndo" title="元に戻す (Ctrl+Z)">元に戻す</button>
+    <button id="btnRedo" title="やり直し (Ctrl+Y)">やり直し</button>
+    <span class="spacer"></span>
+    <button id="btnLoad" title="設定 JSON を読み込む (Ctrl+O)">JSON 読込</button>
+    <button id="btnSave" title="設定 JSON を保存 (Ctrl+S)">JSON 保存</button>
+    <button id="btnCsvIn" title="係数 CSV を読み込む">CSV 読込</button>
+    <button id="btnCsvOut" title="係数 CSV を保存">CSV 保存</button>
+    <button id="btnPng" title="表示中の画像を PNG 保存 (Ctrl+E)">PNG 保存</button>
+    <button id="btnHelp" title="ヘルプ (F1)">ヘルプ</button>
+  </header>
+
+  <div id="errBox"></div>
+
+  <main>
+    <aside id="left">
+      <section>
+        <h2>グリッド設定</h2>
+        <div class="field">
+          <label for="inN">配列サイズ N</label>
+          <select id="inN">
+            <option>256</option><option>512</option><option selected>1024</option><option>2048</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="inQ">サンプリング q</label>
+          <input type="number" id="inQ" value="4" min="1" max="32" step="0.5">
+          <span class="hint">λ/D あたりの画素数</span>
+        </div>
+        <div class="field">
+          <label>瞳直径</label>
+          <span class="hint" id="outDpix">–</span>
+        </div>
+        <div class="field">
+          <label for="inPreview">プレビュー N</label>
+          <select id="inPreview">
+            <option>256</option><option selected>512</option><option value="0">使わない</option>
+          </select>
+        </div>
+      </section>
+
+      <section>
+        <h2>瞳マスク</h2>
+        <div class="field">
+          <label for="inShape">形状</label>
+          <select id="inShape">
+            <option value="circular" selected>円形</option>
+            <option value="rectangular">矩形</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="inEps">中心遮蔽 ε</label>
+          <input type="number" id="inEps" value="0" min="0" max="0.9" step="0.05">
+        </div>
+        <div class="field">
+          <label for="inSpider">スパイダー</label>
+          <select id="inSpider">
+            <option value="0" selected>なし</option><option value="3">3 本</option><option value="4">4 本</option>
+          </select>
+          <input type="number" id="inSpiderW" value="2" min="0.5" max="20" step="0.5" title="幅 [画素]">
+        </div>
+        <div class="field">
+          <label for="inApod">アポダイズ</label>
+          <select id="inApod">
+            <option value="none" selected>なし</option><option value="gaussian">ガウシアン</option>
+          </select>
+          <input type="number" id="inApodW" value="0.7" min="0.1" max="3" step="0.1" title="幅 w">
+        </div>
+      </section>
+
+      <section>
+        <h2>Zernike 係数</h2>
+        <div class="row2">
+          <label for="inUnit">単位</label>
+          <select id="inUnit">
+            <option value="rad" selected>rad</option>
+            <option value="waves">λ</option>
+            <option value="nm">nm</option>
+          </select>
+          <label for="inLambda">λ [nm]</label>
+          <input type="number" id="inLambda" value="550" min="100" max="20000" step="10">
+        </div>
+        <div class="row2" style="margin-top:4px">
+          <label for="inNmax">n<sub>max</sub></label>
+          <select id="inNmax">
+            <option>4</option><option>6</option><option>10</option><option selected>20</option>
+          </select>
+          <label for="inRange">スライダ範囲 ±</label>
+          <input type="number" id="inRange" value="2" min="0.1" max="20" step="0.1">
+        </div>
+        <div class="row2" style="margin-top:4px">
+          <input type="text" id="inFilter" placeholder="番号・名称で絞り込み" style="flex:1">
+          <label><input type="checkbox" id="inNonZero"> 非ゼロのみ</label>
+        </div>
+        <div class="row2" style="margin-top:4px">
+          <button id="btnExpandAll">すべて展開</button>
+          <button id="btnCollapseAll">すべて折りたたむ</button>
+        </div>
+        <div id="coeffTable" style="margin-top:6px"></div>
+      </section>
+    </aside>
+
+    <section id="right">
+      <div class="views">
+        <figure>
+          <figcaption>瞳面（波面）[rad]</figcaption>
+          <div class="viewbox">
+            <div class="canvas-wrap"><canvas id="cvPupil"></canvas></div>
+            <div class="cbar"><div class="hi" id="pupHi">–</div><canvas id="cbPupil" width="14" height="200"></canvas><div class="lo" id="pupLo">–</div></div>
+          </div>
+        </figure>
+        <figure>
+          <figcaption>PSF（強度、総和正規化）</figcaption>
+          <div class="viewbox">
+            <div class="canvas-wrap"><canvas id="cvPsf"></canvas></div>
+            <div class="cbar"><div class="hi" id="psfHi">–</div><canvas id="cbPsf" width="14" height="200"></canvas><div class="lo" id="psfLo">–</div></div>
+          </div>
+        </figure>
+      </div>
+
+      <div class="row2">
+        <label for="inPupilView">瞳面表示</label>
+        <select id="inPupilView">
+          <option value="wavefront" selected>波面（位相）</option>
+          <option value="amplitude">振幅</option>
+        </select>
+        <label for="inPupCmap">配色</label>
+        <select id="inPupCmap"></select>
+        <span style="width:12px"></span>
+        <label for="inScale">PSF</label>
+        <select id="inScale">
+          <option value="log" selected>対数</option><option value="linear">リニア</option><option value="gamma">γ 補正</option>
+        </select>
+        <input type="number" id="inFloor" value="-50" min="-120" max="-5" step="5" title="対数下限 [dB]">
+        <input type="number" id="inGamma" value="0.4" min="0.05" max="1" step="0.05" title="γ" style="display:none">
+        <label for="inZoom">ズーム ±</label>
+        <input type="number" id="inZoom" value="16" min="0.5" max="256" step="0.5" title="λ/D">
+        <label for="inPsfCmap">配色</label>
+        <select id="inPsfCmap"></select>
+      </div>
+
+      <figure id="plotWrap">
+        <figcaption>断面（PSF 水平カット / 理想 Airy）</figcaption>
+        <canvas id="plot"></canvas>
+      </figure>
+
+      <div id="metrics">
+        <div class="m"><b>RMS</b><span id="mRms">–</span></div>
+        <div class="m"><b>PV</b><span id="mPv">–</span></div>
+        <div class="m"><b>Strehl (定義)</b><span id="mStrehl">–</span></div>
+        <div class="m"><b>Strehl (ピーク)</b><span id="mStrehlPk">–</span></div>
+        <div class="m"><b>Maréchal</b><span id="mMarechal">–</span></div>
+        <div class="m"><b>FWHM</b><span id="mFwhm">–</span></div>
+        <div class="m"><b>EE(3 λ/D)</b><span id="mEe">–</span></div>
+        <div class="m"><b>非ゼロ項</b><span id="mModes">–</span></div>
+        <div class="full">
+          <label><input type="checkbox" id="inExclude" checked> ピストン/チルトを除外して指標を計算</label>
+          <span class="hint" id="mNote"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="stGrid">–</span>
+    <span id="stCursor">–</span>
+    <span id="stTime">–</span>
+    <span id="stBackend">–</span>
+    <span id="stCache">–</span>
+  </footer>
+
+  <input type="file" id="filePicker" accept=".json,.csv,.txt" style="display:none">
+
+  <dialog id="dlgHelp">
+    <h3>Zernike PSF Viewer</h3>
+    <p style="font-size:12px">
+      Zernike 係数（Noll インデックス、Noll 正規化、位相は rad）から瞳関数
+      <code>P = A·exp(iW)</code> を作り、<code>PSF = |FFT2(P)|²</code>（総和正規化）を表示します。
+      規約は <code>torchmfbd/zern.py</code> に準拠しています。
+    </p>
+    <table>
+      <tr><th>キー</th><th>動作</th></tr>
+      <tr><td>Ctrl+N</td><td>全係数をクリア</td></tr>
+      <tr><td>Ctrl+O / Ctrl+S</td><td>設定の読込 / 保存</td></tr>
+      <tr><td>Ctrl+E</td><td>PNG エクスポート</td></tr>
+      <tr><td>Ctrl+Z / Ctrl+Y</td><td>元に戻す / やり直し</td></tr>
+      <tr><td>Ctrl+F</td><td>係数の絞り込み欄にフォーカス</td></tr>
+      <tr><td>↑ / ↓</td><td>選択中の係数を ±0.05 rad</td></tr>
+      <tr><td>Shift+↑ / ↓</td><td>±0.005 rad</td></tr>
+      <tr><td>PageUp / PageDown</td><td>±0.5 rad</td></tr>
+      <tr><td>L</td><td>PSF をリニア ⇔ 対数</td></tr>
+      <tr><td>R</td><td>表示レンジを自動調整</td></tr>
+      <tr><td>ホイール</td><td>PSF のズーム</td></tr>
+      <tr><td>F1</td><td>このヘルプ</td></tr>
+    </table>
+    <p style="font-size:11px;color:#8b93a7;margin-top:10px">
+      注意: 中心遮蔽・スパイダー・矩形瞳では Zernike の直交性が崩れるため、
+      RMS は係数の二乗和ではなくマップから数値的に計算しています。<br>
+      計算は Web Worker で行い、起動しない環境では自動的にメインスレッドへ切り替えます
+      （画面右下に表示）。URL の末尾に <code>?backend=main</code> を付けると固定できます。
+    </p>
+    <form method="dialog" style="margin-top:8px"><button>閉じる</button></form>
+  </dialog>
+</div>
