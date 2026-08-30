@@ -1,0 +1,15 @@
+{
+  "name": "zernike-psf-viewer",
+  "version": "0.1.0",
+  "description": "Zernike 係数から瞳面と PSF を表示する単一 HTML ツール",
+  "private": true,
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "bench": "node tools/bench.js",
+    "build": "node build/build.mjs",
+    "fixtures": "python3 tools/gen_fixtures.py"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
