@@ -743,7 +743,7 @@ Q-5 により最大 231 行になるため、次を必須とする。
 | スライダのドラッグ | 該当係数を連続変更、プレビュー品質 (`N=512`) で追従 |
 | 数値入力 + Enter | 確定してフル品質で再計算 |
 | 画像上でホイール | ズーム（PSF は `λ/D` 範囲、瞳面は等倍固定） |
-| 画像上で右クリック | コンテキストメニュー（PNG 保存 / CSV 保存 / レンジ自動調整） |
+| 画像上で右クリック | コンテキストメニュー。瞳面: PNG 保存 / 波面 CSV 保存 / レンジ自動調整。PSF: PNG 保存 / PSF CSV 保存 / ズームを ±16 λ/D に戻す / レンジ自動調整 |
 | Ctrl+Z / Ctrl+Y | 係数変更の Undo / Redo（32 段） |
 
 ---
@@ -792,9 +792,10 @@ Q-5 により最大 231 行になるため、次を必須とする。
 ### 10.2.1 ブラウザ側スモークテスト（`node tools/smoke.mjs`）
 
 ビルド済みの単一 HTML を**ヘッドレス Chromium で `file://` から開き**、UI を実際に操作して
-23 項目を検証する（外部依存なし。Chromium は同梱のものを自動検出する）。
+32 項目を検証する（外部依存なし。Chromium は同梱のものを自動検出する）。
 初期計算・231 行の展開・n=20 モードの入力・中心遮蔽・単位切替・表示切替・JSON/CSV 往復・
-絞り込み・未捕捉エラーの有無を確認する。
+絞り込み・断面の切替・マップ CSV の書式・コンテキストメニュー・プリセット・
+未捕捉エラーの有無を確認する。
 
 > **ハーネスの制約（重要）**: ヘッドレスの `--virtual-time-budget` は仮想時計を早送りするため、
 > (a) **所要時間を測れない**（`Date.now()` も `performance.now()` も仮想時間で進む）、
@@ -809,6 +810,10 @@ Q-5 により最大 231 行になるため、次を必須とする。
 開発機（Python が使える環境で構わない）で参照実装を動かし、
 **数値だけを `tests/fixtures/*.csv` としてリポジトリに固定する**（手順は付録 C）。
 これにより、製品側もテスト実行側も Python に依存しない。
+
+fixture は `tools/gen_fixtures.py`（numpy 不要の転記版）が生成し、
+`tools/verify_reference.py` が**本物の `torchmfbd/zern.py`** と突き合わせる。
+**実施済みで 10 項目すべて一致**（付録 C.2.1）。
 
 ---
 
@@ -828,8 +833,8 @@ Q-5 により最大 231 行になるため、次を必須とする。
 - **IT-01**（対象 Windows PC の Edge での性能確認）— 開発環境の実測では目標に対し 4 倍の余裕がある（§8.2）
 - **IT-03**（高 DPI 200% 表示）— 実機確認が必要
 - **IT-04**（長時間操作でのメモリ）— 実機確認が必要
-- 付録 C.2 の手順で、numpy が使える開発機から本物の `torchmfbd` を使って fixture を再生成し、
-  現在コミットされている転記版と一致することを確認する
+
+**完了済み**: 付録 C.2.1 の突き合わせ（本物の `torchmfbd/zern.py` と 10 項目すべて一致）。
 
 ---
 
@@ -892,8 +897,9 @@ tools/smoke.mjs           … ヘッドレス Chromium での UI スモークテ
 | `npm run build` | `dist/ZernikePsfViewer.html` を生成する |
 | `npm test` | 単体テスト（29 件） |
 | `npm run bench` | 性能マイクロベンチ（§3.5 / §8.2 の実測値） |
-| `node tools/smoke.mjs` | ビルド済み HTML をヘッドレス Chromium で操作して検証（23 項目） |
-| `npm run fixtures` | 参照 fixture の再生成 |
+| `node tools/smoke.mjs` | ビルド済み HTML をヘッドレス Chromium で操作して検証（32 項目） |
+| `npm run fixtures` | 参照 fixture の再生成（numpy 不要） |
+| `npm run verify-reference` | 本物の `torchmfbd/zern.py` と fixture を突き合わせる（要 numpy + clone） |
 
 **Node が必要なのは開発時だけで、配布先には不要**（成果物は HTML 1 ファイル）。
 
@@ -906,7 +912,20 @@ URL の末尾に `?backend=main` を付けると計算をメインスレッド�
 （Worker が不調な環境での回避、およびテストの決定性確保に使う）。`?backend=worker` で
 ハンドシェイクのタイムアウトを無効化して Worker を強制する。
 
-### 14.4 仕様からの差分（実装で確定・訂正した点）
+### 14.4 機能要件の実装状況
+
+| ID | 機能 | 状態 |
+| --- | --- | --- |
+| FR-01〜FR-08 | 係数表・231 モードの取り回し・絞り込み・方式表示・単位切替・一括操作・瞳マスク・波面表示 | 実装済み |
+| FR-09〜FR-11 | 瞳振幅表示・PSF 表示（対数/リニア/γ）・ズーム | 実装済み |
+| FR-12 | 断面プロット | 実装済み（PSF 水平/垂直、波面 水平/垂直の 4 種。PSF は理想 Airy を重畳） |
+| FR-13, FR-14 | 指標パネル・リアルタイム更新 | 実装済み |
+| FR-15 | プリセット | 実装済み（単一収差 8 種 + 複合収差 + 望遠鏡瞳 + 大気乱流風。乱流は `n^(-11/6)` の重みで乱数を振る） |
+| FR-16〜FR-18 | JSON 保存/読込・CSV 入出力・PNG エクスポート | 実装済み（CSV 読込は `nollStart` を指定できる） |
+| FR-19 | 数値エクスポート | 実装済み（右クリックから波面 / PSF をマップ CSV で保存。N≥1024 はサイズを確認） |
+| FR-20〜FR-22 | MTF・スルーフォーカス・比較表示 | **v1 対象外**（Q-7）。ただし Space キーによる無収差との一時比較は実装済み |
+
+### 14.5 仕様からの差分（実装で確定・訂正した点）
 
 | 項目 | v0.3 の記述 | 実装での確定 |
 | --- | --- | --- |
@@ -1044,6 +1063,35 @@ psf /= psf.sum()
 np.savetxt('wavefront.csv', W, delimiter=',', fmt='%.17g')
 np.savetxt('psf.csv', np.fft.fftshift(psf), delimiter=',', fmt='%.17g')
 ```
+
+### C.2.1 本物の torchmfbd との突き合わせ（実施済み）
+
+`tools/gen_fixtures.py` は zern.py の式を純 Python に**転記**したものなので、
+numpy が使える環境で本物と一致することを確認する必要がある。
+`tools/verify_reference.py` がそれを自動で行う。
+
+```
+pip install numpy
+git clone --depth 1 https://github.com/aasensio/torchmfbd /path/to/torchmfbd
+python3 tools/verify_reference.py --zern /path/to/torchmfbd/src/torchmfbd/zern.py
+```
+
+**実施結果（numpy 2.4.6 / Python 3.11.15、10 項目すべて一致）:**
+
+| 検証項目 | 一致度 |
+| --- | --- |
+| Noll インデックス `zernIndex(j)` の `j = 1…231` | **231 件すべて完全一致** |
+| 基底マップ Noll 1 / 4 / 8 / 11 / 22 / 100 / 231 (n=20) | normAbs ≤ 9.5e-15、relSig ≤ 6.1e-13 |
+| 合成波面（3 モード、rad） | normAbs 1.1e-14、relSig 1.1e-13 |
+| PSF（総和正規化・fftshift 済） | normAbs 9.1e-16、relSig 2.2e-13 |
+
+いずれも倍精度の丸め誤差の範囲であり、転記が正しいことが確認できた。
+JavaScript 実装は UT-18 でこの fixture と突き合わせているため、
+**本ツールの数値は参照実装まで遡って検証されている**ことになる。
+
+なお `ZernikeNaive.R_nm`（`mode='Standard'`）は Python 3.11 で
+`TypeError: 'numpy.float64' object cannot be interpreted as an integer` になることも
+このスクリプトで確認済み（C.3 の注意を参照）。
 
 ### C.3 生成時の注意
 

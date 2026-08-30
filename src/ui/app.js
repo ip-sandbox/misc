@@ -34,7 +34,8 @@
       psfLogFloorDb: -50,
       psfGamma: 0.4,
       psfZoomLambdaOverD: 16,
-      psfColormap: 'viridis'
+      psfColormap: 'viridis',
+      cut: 'psf-h'
     },
     expanded: new Set([0, 1, 2, 3, 4])
   };
@@ -281,26 +282,32 @@
   }
 
   function updatePlot(r) {
+    var mode = state.display.cut;
+    if (mode === 'wf-h' || mode === 'wf-v') return updateWavefrontPlot(r, mode === 'wf-v');
+    return updatePsfPlot(r, mode === 'psf-v');
+  }
+
+  function updatePsfPlot(r, vertical) {
     var q = r.q;
     var half = Math.min(state.display.psfZoomLambdaOverD, r.N / 2 / q);
     var n = Math.round(half * q);
     var xs = [];
     var ys = [];
     var ideal = [];
-    var row = r.N / 2;
-    var col = r.N / 2;
+    var c0 = r.N / 2;
     for (var k = -n; k <= n; k++) {
-      var c = col + k;
-      if (c < 0 || c >= r.N) continue;
+      var idx = vertical ? (c0 + k) * r.N + c0 : c0 * r.N + (c0 + k);
+      if (c0 + k < 0 || c0 + k >= r.N) continue;
       xs.push(k / q);
-      ys.push(r.psf[row * r.N + c] / Math.max(r.psfPeak, 1e-30));
+      ys.push(r.psf[idx] / Math.max(r.psfPeak, 1e-30));
       ideal.push(ZPV.metrics.airy(Math.abs(k) / q));
     }
     var logY = state.display.psfScale === 'log';
+    $('cutNote').textContent = '（強度はピーク比）';
     plot.draw(
       [
         { x: xs, y: ideal, color: '#8b93a7', dash: [3, 3], label: '理想 Airy' },
-        { x: xs, y: ys, color: '#58a6ff', label: '実測' }
+        { x: xs, y: ys, color: '#58a6ff', label: vertical ? '実測 (垂直)' : '実測 (水平)' }
       ],
       {
         logY: logY,
@@ -308,6 +315,29 @@
         ymax: 1,
         xlabel: 'λ/D'
       }
+    );
+  }
+
+  function updateWavefrontPlot(r, vertical) {
+    var half = r.pupilDiameterPx / 2;
+    var c0 = r.N / 2;
+    var n = Math.ceil(half);
+    var scale = ZPV.io.radToUnit(state.unit, state.wavelengthNm);
+    var xs = [];
+    var ys = [];
+    for (var k = -n; k <= n; k++) {
+      var pos = c0 + k;
+      if (pos < 0 || pos >= r.N) continue;
+      var idx = vertical ? pos * r.N + c0 : c0 * r.N + pos;
+      if (!r.mask[idx]) continue; // マスク外は描かない
+      xs.push(k / half);
+      ys.push(r.wavefront[idx] * scale);
+    }
+    $('cutNote').textContent = '（横軸は瞳半径で正規化、縦軸 ' + unitLabel() + '）';
+    if (!xs.length) { plot.draw([], {}); return; }
+    plot.draw(
+      [{ x: xs, y: ys, color: '#ff9b6a', label: vertical ? '波面 (垂直)' : '波面 (水平)' }],
+      { logY: false, xmin: -1, xmax: 1, xlabel: 'ρ' }
     );
   }
 
@@ -401,9 +431,12 @@
     host.appendChild(frag);
   }
 
+  /* 入力欄に収まる桁数に丸める（内部値は丸めない。表示のみ） */
   function trimNum(v) {
     if (!v) return '0';
-    return Number(v.toPrecision(6)).toString();
+    var a = Math.abs(v);
+    if (a < 1e-4 || a >= 1e5) return v.toExponential(2);
+    return Number(v.toPrecision(4)).toString();
   }
 
   /* 値だけを更新する（表の再構築を避ける） */
@@ -418,6 +451,61 @@
       if (document.activeElement !== sld) sld.value = v;
       rows[i].classList.toggle('nz', !!state.coeffs[j]);
     }
+  }
+
+  /* ---------------- プリセット (FR-15) ---------------- */
+  var PRESETS = [
+    { id: '', label: '— プリセットを選択 —' },
+    { id: 'none', label: '無収差', coeffs: {} },
+    { id: 'defocus', label: 'デフォーカス 0.5 rad', coeffs: { 4: 0.5 } },
+    { id: 'astig', label: '非点収差 0.5 rad', coeffs: { 6: 0.5 } },
+    { id: 'coma', label: 'コマ収差 0.5 rad', coeffs: { 8: 0.5 } },
+    { id: 'trefoil', label: 'トレフォイル 0.5 rad', coeffs: { 10: 0.5 } },
+    { id: 'spherical', label: '球面収差 0.5 rad', coeffs: { 11: 0.5 } },
+    { id: 'sec-spherical', label: '二次球面収差 0.5 rad', coeffs: { 22: 0.5 } },
+    { id: 'quadrafoil', label: 'クアドラフォイル 0.5 rad', coeffs: { 14: 0.5 } },
+    { id: 'high', label: '高次のみ (n=20) 0.5 rad', coeffs: { 231: 0.5 } },
+    {
+      id: 'mixed', label: '複合収差（コマ+非点+球面）',
+      coeffs: { 6: 0.45, 8: 0.6, 9: 0.35, 11: 0.3 }
+    },
+    {
+      id: 'telescope', label: '望遠鏡瞳（遮蔽 0.3 + スパイダー 4 本）',
+      coeffs: { 4: 0.2, 11: 0.3 },
+      pupil: { obscurationRatio: 0.3, spider: { count: 4, widthPixels: 5 } }
+    },
+    {
+      id: 'turbulence', label: '大気乱流風（n≤6、Kolmogorov 風の重み）',
+      random: { nMax: 6, totalRms: 1.0 }
+    }
+  ];
+
+  /* Kolmogorov 乱流では高次ほどパワーが小さい。n^(-11/6) 程度の重みで乱数を振る。 */
+  function randomCoeffs(nMax, totalRms) {
+    var out = {};
+    var jmax = noll.nollRangeForOrder(nMax)[1];
+    var vals = [];
+    var j;
+    for (j = 4; j <= jmax; j++) {
+      vals.push((Math.random() * 2 - 1) * Math.pow(noll.nollToNM(j).n, -11 / 6));
+    }
+    var norm = Math.sqrt(vals.reduce(function (a, b) { return a + b * b; }, 0)) || 1;
+    for (var k = 0; k < vals.length; k++) out[4 + k] = (vals[k] / norm) * totalRms;
+    return out;
+  }
+
+  function applyPreset(id) {
+    var preset = null;
+    for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i].id === id) preset = PRESETS[i];
+    if (!preset || !preset.id) return;
+    pushUndo();
+    if (preset.random) state.coeffs = randomCoeffs(preset.random.nMax, preset.random.totalRms);
+    else state.coeffs = Object.assign({}, preset.coeffs);
+    if (preset.pupil) state.pupil = ZPV.pupil.merge(state.pupil, preset.pupil);
+    else state.pupil = ZPV.pupil.merge(state.pupil, { obscurationRatio: 0, spider: { count: 0 } });
+    syncControls();
+    buildTable();
+    requestCompute(false);
   }
 
   /* ---------------- Undo / Redo ---------------- */
@@ -467,8 +555,9 @@
     inp.click();
   }
 
-  function exportPng() {
-    var src = $('cvPsf');
+  function exportPng(which) {
+    var isPupil = which === 'pupil';
+    var src = isPupil ? $('cvPupil') : $('cvPsf');
     var w = src.width;
     var h = src.height;
     var out = document.createElement('canvas');
@@ -481,20 +570,83 @@
     ctx.fillStyle = '#d6dbe6';
     ctx.font = '12px sans-serif';
     var r = last || {};
-    ctx.fillText(
-      'PSF  N=' + r.N + ' q=' + r.q + '  ±' + state.display.psfZoomLambdaOverD +
-      ' λ/D  ' + state.display.psfScale +
-      (state.display.psfScale === 'log' ? ' (' + state.display.psfLogFloorDb + ' dB)' : '') +
-      '  Strehl=' + (r.metrics ? r.metrics.strehlDefinition.toFixed(4) : '-'),
-      6, h + 17
-    );
+    var caption = isPupil
+      ? '瞳面 ' + (state.display.pupilView === 'amplitude' ? '振幅' : '波面 [rad]') +
+        '  N=' + r.N + ' q=' + r.q + ' 瞳直径=' + (r.pupilDiameterPx || 0).toFixed(2) + 'px' +
+        '  RMS=' + (r.metrics ? r.metrics.rms.toFixed(4) + ' rad' : '-')
+      : 'PSF  N=' + r.N + ' q=' + r.q + '  ±' + state.display.psfZoomLambdaOverD +
+        ' λ/D  ' + state.display.psfScale +
+        (state.display.psfScale === 'log' ? ' (' + state.display.psfLogFloorDb + ' dB)' : '') +
+        '  Strehl=' + (r.metrics ? r.metrics.strehlDefinition.toFixed(4) : '-');
+    ctx.fillText(caption, 6, h + 17);
     out.toBlob(function (b) {
       var a = document.createElement('a');
       a.href = URL.createObjectURL(b);
-      a.download = 'psf.png';
+      a.download = isPupil ? 'pupil.png' : 'psf.png';
       document.body.appendChild(a);
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    });
+  }
+
+  /* マップ CSV エクスポート (FR-19)。N=1024 で約 14 MB になるため確認を挟む。 */
+  function exportMapCsv(which) {
+    if (!last) return;
+    var N = last.N;
+    if (N >= 1024) {
+      var mb = ((N * N * 14) / 1048576).toFixed(0);
+      if (!window.confirm('N=' + N + ' のマップは約 ' + mb + ' MB になります。書き出しますか？')) return;
+    }
+    var isPupil = which === 'wavefront';
+    var data = isPupil ? last.wavefront : last.psf;
+    var header = isPupil
+      ? 'type=wavefront unit=rad N=' + N + ' q=' + last.q +
+        ' D_pix=' + last.pupilDiameterPx.toFixed(4) + ' mask_outside=0'
+      : 'type=psf unit=normalized_sum fftshift=true N=' + N + ' q=' + last.q +
+        ' lambdaOverD_perPixel=' + (1 / last.q);
+    download(isPupil ? 'wavefront.csv' : 'psf.csv',
+      ZPV.io.formatMapCsv(data, N, header), 'text/csv;charset=utf-8');
+  }
+
+  /* ---------------- コンテキストメニュー (§9.4) ---------------- */
+  function showMenu(x, y, items) {
+    var menu = $('ctxmenu');
+    menu.textContent = '';
+    items.forEach(function (it) {
+      var b = document.createElement('button');
+      b.textContent = it.label;
+      b.onclick = function () { hideMenu(); it.run(); };
+      menu.appendChild(b);
+    });
+    menu.hidden = false;
+    var rect = menu.getBoundingClientRect();
+    menu.style.left = Math.min(x, window.innerWidth - rect.width - 8) + 'px';
+    menu.style.top = Math.min(y, window.innerHeight - rect.height - 8) + 'px';
+  }
+
+  function hideMenu() { $('ctxmenu').hidden = true; }
+
+  function bindContextMenu(canvas, which) {
+    canvas.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      var items = which === 'pupil'
+        ? [
+            { label: '瞳面を PNG で保存', run: function () { exportPng('pupil'); } },
+            { label: '波面を CSV で保存', run: function () { exportMapCsv('wavefront'); } },
+            { label: '表示レンジを自動調整', run: updateViewParams }
+          ]
+        : [
+            { label: 'PSF を PNG で保存', run: function () { exportPng('psf'); } },
+            { label: 'PSF を CSV で保存', run: function () { exportMapCsv('psf'); } },
+            { label: 'ズームを ±16 λ/D に戻す', run: function () {
+                state.display.psfZoomLambdaOverD = 16;
+                $('inZoom').value = '16';
+                updateViewParams();
+                if (last) updatePlot(last);
+              } },
+            { label: '表示レンジを自動調整', run: updateViewParams }
+          ];
+      showMenu(e.clientX, e.clientY, items);
     });
   }
 
@@ -600,6 +752,14 @@
       if (last) updatePlot(last);
     };
     $('inExclude').onchange = function () { state.excludePistonTilt = this.checked; requestCompute(false); };
+    $('inCut').onchange = function () {
+      state.display.cut = this.value;
+      if (last) updatePlot(last);
+    };
+    $('inPreset').onchange = function () {
+      applyPreset(this.value);
+      this.value = '';
+    };
 
     // ボタン
     $('btnClear').onclick = function () { pushUndo(); state.coeffs = {}; buildTable(); requestCompute(false); };
@@ -670,7 +830,7 @@
         ZPV.io.formatCoefficientCsv(state.coeffs, { unit: state.unit, wavelengthNm: state.wavelengthNm }),
         'text/csv;charset=utf-8');
     };
-    $('btnPng').onclick = exportPng;
+    $('btnPng').onclick = function () { exportPng('psf'); };
 
     // カーソル読み取りとホイールズーム
     hookCanvas($('cvPsf'), psfView, function (p, r) {
@@ -696,6 +856,13 @@
       updateViewParams();
       if (last) updatePlot(last);
     }, { passive: false });
+
+    bindContextMenu($('cvPupil'), 'pupil');
+    bindContextMenu($('cvPsf'), 'psf');
+    document.addEventListener('mousedown', function (e) {
+      if (!e.target.closest || !e.target.closest('#ctxmenu')) hideMenu();
+    });
+    window.addEventListener('blur', hideMenu);
 
     window.addEventListener('resize', resizeAll);
     document.addEventListener('keydown', onKey);
@@ -731,7 +898,7 @@
       else if (k === 'n') { e.preventDefault(); $('btnClear').click(); }
       else if (k === 's') { e.preventDefault(); $('btnSave').click(); }
       else if (k === 'o') { e.preventDefault(); $('btnLoad').click(); }
-      else if (k === 'e') { e.preventDefault(); $('btnPng').click(); }
+      else if (k === 'e') { e.preventDefault(); exportPng('psf'); }
       else if (k === 'z') { e.preventDefault(); undo(); }
       else if (k === 'y') { e.preventDefault(); redo(); }
       return;
@@ -794,8 +961,19 @@
     $('inFloor').value = state.display.psfLogFloorDb;
     $('inGamma').value = state.display.psfGamma;
     $('inZoom').value = state.display.psfZoomLambdaOverD;
+    $('inCut').value = state.display.cut;
     $('inFloor').style.display = state.display.psfScale === 'log' ? '' : 'none';
     $('inGamma').style.display = state.display.psfScale === 'gamma' ? '' : 'none';
+  }
+
+  function fillPresetSelect() {
+    var sel = $('inPreset');
+    PRESETS.forEach(function (pr) {
+      var o = document.createElement('option');
+      o.value = pr.id;
+      o.textContent = pr.label;
+      sel.appendChild(o);
+    });
   }
 
   function fillColormapSelects() {
@@ -825,6 +1003,7 @@
       showError('WebGL2 が使えないため Canvas2D で描画します: ' + psfView.glError);
     }
     fillColormapSelects();
+    fillPresetSelect();
     syncControls();
     initBackend();
     bind();

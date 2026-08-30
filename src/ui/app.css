@@ -64,7 +64,7 @@ main { flex: 1 1 auto; display: grid; grid-template-columns: 392px 1fr; min-heig
 .grp .cnt { color: var(--fg-dim); margin-left: auto; font-size: 11px; }
 .grp.has-nz .cnt { color: var(--accent2); }
 .crow {
-  display: grid; grid-template-columns: 30px 52px 1fr 74px 96px;
+  display: grid; grid-template-columns: 28px 50px 1fr 82px 92px;
   gap: 4px; align-items: center; padding: 1px 6px; font-size: 11px;
 }
 .crow:hover { background: #1a1f2a; }
@@ -122,3 +122,15 @@ dialog td, dialog th { border: 1px solid var(--line); padding: 2px 8px; text-ali
   border-radius: 4px; color: var(--warn); font-size: 11px; white-space: pre-wrap;
   max-height: 120px; overflow: auto;
 }
+
+#ctxmenu {
+  position: fixed; z-index: 50; min-width: 190px; padding: 3px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+}
+#ctxmenu button {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  padding: 5px 10px; border-radius: 3px; font-size: 12px;
+}
+#ctxmenu button:hover { background: #2a3242; }
+#plotWrap select { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 3px; font-size: 11px; }

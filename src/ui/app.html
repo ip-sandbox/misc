@@ -97,6 +97,10 @@
           <label><input type="checkbox" id="inNonZero"> 非ゼロのみ</label>
         </div>
         <div class="row2" style="margin-top:4px">
+          <label for="inPreset">プリセット</label>
+          <select id="inPreset" style="flex:1"></select>
+        </div>
+        <div class="row2" style="margin-top:4px">
           <button id="btnExpandAll">すべて展開</button>
           <button id="btnCollapseAll">すべて折りたたむ</button>
         </div>
@@ -144,7 +148,16 @@
       </div>
 
       <figure id="plotWrap">
-        <figcaption>断面（PSF 水平カット / 理想 Airy）</figcaption>
+        <figcaption>
+          断面
+          <select id="inCut" style="margin-left:6px">
+            <option value="psf-h" selected>PSF 水平カット</option>
+            <option value="psf-v">PSF 垂直カット</option>
+            <option value="wf-h">波面 水平カット</option>
+            <option value="wf-v">波面 垂直カット</option>
+          </select>
+          <span id="cutNote" class="hint"></span>
+        </figcaption>
         <canvas id="plot"></canvas>
       </figure>
 
@@ -174,6 +187,7 @@
   </footer>
 
   <input type="file" id="filePicker" accept=".json,.csv,.txt" style="display:none">
+  <div id="ctxmenu" hidden></div>
 
   <dialog id="dlgHelp">
     <h3>Zernike PSF Viewer</h3>
@@ -195,6 +209,7 @@
       <tr><td>L</td><td>PSF をリニア ⇔ 対数</td></tr>
       <tr><td>R</td><td>表示レンジを自動調整</td></tr>
       <tr><td>ホイール</td><td>PSF のズーム</td></tr>
+      <tr><td>右クリック</td><td>PNG 保存 / マップ CSV 保存 / 表示レンジ自動調整</td></tr>
       <tr><td>F1</td><td>このヘルプ</td></tr>
     </table>
     <p style="font-size:11px;color:#8b93a7;margin-top:10px">

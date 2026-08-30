@@ -36,9 +36,18 @@ const HARNESS = `
 (function () {
   var log = [];
   var failed = 0;
+  // ハーネス自身の例外で RUNNING のまま止まらないようにする
+  window.addEventListener('error', function (e) {
+    log.push('EXCEPTION | ' + (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || ''));
+    failed++;
+    document.getElementById('smoke-result').textContent = 'FAILED(' + failed + ')\\n' + log.join('\\n');
+  });
   function check(name, cond, detail) {
     log.push((cond ? 'PASS' : 'FAIL') + ' | ' + name + (detail ? ' | ' + detail : ''));
     if (!cond) failed++;
+    // 途中で止まっても、どこまで進んだか分かるよう毎回書き出す
+    document.getElementById('smoke-result').textContent =
+      'RUNNING(' + log.length + ')\\n' + log.join('\\n');
   }
   function finish() {
     document.getElementById('smoke-result').textContent =
@@ -167,9 +176,55 @@ const HARNESS = `
         var fRows = document.querySelectorAll('#coeffTable .crow').length;
         check('名称での絞り込みが効く', fRows > 0 && fRows < 231, fRows + ' 行');
 
-        check('最終的に未捕捉エラーが無い', $('errBox').style.display !== 'block',
-          $('errBox').textContent.slice(0, 200));
-        finish();
+        // 断面の切替（FR-12）
+        var cutBefore = document.getElementById('plot').toDataURL().length;
+        $('inCut').value = 'wf-h';
+        $('inCut').onchange();
+        check('波面の断面に切り替わる', /瞳半径/.test($('cutNote').textContent),
+          $('cutNote').textContent);
+        check('断面プロットが再描画される',
+          document.getElementById('plot').toDataURL().length !== cutBefore);
+        $('inCut').value = 'psf-v';
+        $('inCut').onchange();
+        check('PSF 垂直カットに切り替わる', /ピーク比/.test($('cutNote').textContent),
+          $('cutNote').textContent);
+
+        // マップ CSV の書式（FR-19）
+        try {
+          var mapCsv = ZPV.io.formatMapCsv(new Float32Array([1, 2, 3, 4]), 2, 'type=test');
+          var lines = mapCsv.trim().split('\\n');
+          check('マップ CSV の形式', lines.length === 3 && lines[0] === '# type=test' &&
+            /^1\\.0+,2\\.0+$/.test(lines[1]), JSON.stringify(lines));
+        } catch (e) { check('マップ CSV の形式', false, e.message); }
+
+        // 右クリックのコンテキストメニュー（§9.4）
+        $('cvPsf').dispatchEvent(new MouseEvent('contextmenu',
+          { bubbles: true, cancelable: true, clientX: 100, clientY: 100 }));
+        var menu = $('ctxmenu');
+        check('右クリックでメニューが開く', !menu.hidden && menu.children.length >= 3,
+          menu.children.length + ' 項目');
+        document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        check('メニュー外クリックで閉じる', menu.hidden);
+
+        // プリセット（FR-15）
+        var modesBefore = $('mModes').textContent;
+        $('inPreset').value = 'turbulence';
+        $('inPreset').onchange();
+        waitFor(function () { return $('mModes').textContent !== modesBefore; }, 8000, function (ok4) {
+          check('プリセットが適用され再計算される', ok4,
+            modesBefore + ' -> ' + $('mModes').textContent);
+          check('プリセットの選択は毎回リセットされる', $('inPreset').value === '');
+
+          $('inPreset').value = 'telescope';
+          $('inPreset').onchange();
+          check('プリセットが瞳設定も変える', $('inEps').value === '0.3' && $('inSpider').value === '4',
+            'ε=' + $('inEps').value + ' spider=' + $('inSpider').value);
+
+          check('最終的に未捕捉エラーが無い', $('errBox').style.display !== 'block',
+            $('errBox').textContent.slice(0, 200));
+          finish();
+        });
+        return;
       });
     });
   });
